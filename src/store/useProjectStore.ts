@@ -9,6 +9,7 @@ interface ProjectState {
   updateProject: (id: ID, updates: Partial<Project>) => void;
   deleteProject: (id: ID) => void;
   getProject: (id: ID) => Project | undefined;
+  setProjects: (projects: Project[]) => void;
 }
 
 export const useProjectStore = create<ProjectState>()(
@@ -42,6 +43,8 @@ export const useProjectStore = create<ProjectState>()(
         })),
 
       getProject: (id) => get().projects.find((p) => p.id === id),
+
+      setProjects: (projects) => set({ projects }),
     }),
     {
       name: 'simpliigence-projects',

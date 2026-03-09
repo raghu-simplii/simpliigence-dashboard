@@ -9,6 +9,7 @@ interface TeamState {
   updateMember: (id: ID, updates: Partial<TeamMember>) => void;
   deleteMember: (id: ID) => void;
   getMember: (id: ID) => TeamMember | undefined;
+  setMembers: (members: TeamMember[]) => void;
 }
 
 export const useTeamStore = create<TeamState>()(
@@ -42,6 +43,8 @@ export const useTeamStore = create<TeamState>()(
         })),
 
       getMember: (id) => get().members.find((m) => m.id === id),
+
+      setMembers: (members) => set({ members }),
     }),
     {
       name: 'simpliigence-team',

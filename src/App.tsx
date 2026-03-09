@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 import { RouterProvider } from 'react-router-dom';
 import { router } from './router';
 import { buildSeedData } from './data/employeeSeed';
+import { useSyncStore } from './store';
+import { performSync } from './lib/syncOneDrive';
 
 /**
  * Auto-seed on first visit: if localStorage has no team data (or empty array),
@@ -32,8 +34,30 @@ function useSeedOnFirstVisit() {
   }, []);
 }
 
+/**
+ * Auto-sync from OneDrive on page load if a share URL is configured
+ * and auto-sync is enabled. Debounce: skip if last sync was <60s ago.
+ */
+function useAutoSync() {
+  useEffect(() => {
+    const { oneDriveUrl, autoSyncOnLoad, lastSyncAt, isSyncing } = useSyncStore.getState();
+    if (!oneDriveUrl || !autoSyncOnLoad || isSyncing) return;
+
+    // Debounce: skip if synced within the last 60 seconds
+    if (lastSyncAt) {
+      const elapsed = Date.now() - new Date(lastSyncAt).getTime();
+      if (elapsed < 60_000) return;
+    }
+
+    performSync().catch(() => {
+      // errors are captured in syncStore
+    });
+  }, []);
+}
+
 function App() {
   useSeedOnFirstVisit();
+  useAutoSync();
   return <RouterProvider router={router} />;
 }
 
