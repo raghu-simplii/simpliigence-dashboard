@@ -85,16 +85,17 @@ export default function SettingsPage() {
       <PageHeader title="Settings" subtitle="Manage your data and connections." />
 
       <div className="max-w-3xl space-y-6">
-        {/* OneDrive Spreadsheet Sync */}
-        <Card title="OneDrive Spreadsheet">
+        {/* Cloud Spreadsheet Sync */}
+        <Card title="Live Spreadsheet">
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">OneDrive Share URL</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Dropbox or OneDrive Share Link</label>
+              <p className="text-xs text-slate-500 mb-2">Dropbox recommended. Right-click the file → "Copy link" and paste below.</p>
               <div className="flex gap-2">
                 <input
                   type="text"
                   className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  placeholder="https://1drv.ms/x/..."
+                  placeholder="https://www.dropbox.com/scl/fi/... or https://1drv.ms/x/..."
                   value={syncStore.oneDriveUrl}
                   onChange={(e) => syncStore.setOneDriveUrl(e.target.value)}
                 />

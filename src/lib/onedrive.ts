@@ -1,39 +1,87 @@
 /**
- * OneDrive / SharePoint file download for publicly shared Excel files.
+ * Cloud spreadsheet download — supports Dropbox and OneDrive share links.
  *
- * Supports multiple URL formats:
- *  - Short share links:  https://1drv.ms/x/c/…
- *  - Full share links:   https://onedrive.live.com/…  or  https://…sharepoint.com/…
- *  - Direct embed links:  https://onedrive.live.com/download?resid=…&authkey=…
+ * Dropbox (recommended):
+ *   - Shared links like https://www.dropbox.com/scl/fi/…?dl=0
+ *   - Transforms to dl.dropboxusercontent.com for direct CORS-friendly download
  *
- * Strategy:
- *  1. Try Microsoft Graph shares API (graph.microsoft.com)  — current endpoint
- *  2. Try legacy OneDrive shares API (api.onedrive.com)     — fallback
- *  3. If the URL contains resid + authkey, build a direct download URL
+ * OneDrive (personal only — Business/SharePoint requires auth):
+ *   - Short links like https://1drv.ms/x/…
+ *   - Tries Graph + legacy shares APIs
+ *   - Falls back to direct /content paths
+ *   - Also handles URLs with resid + authkey params
  */
 
-/* ------------------------------------------------------------------ */
-/*  Encoding helper                                                    */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
+/*  Dropbox                                                            */
+/* ================================================================== */
+
+function isDropboxUrl(url: string): boolean {
+  return /dropbox\.com/i.test(url) || /dropboxusercontent\.com/i.test(url);
+}
 
 /**
- * Encode a share URL into a Graph-API-safe token.
- * Algorithm per Microsoft docs:
- *   UTF-8 bytes → base64 → URL-safe (+→-, /→_, strip =) → prepend 'u!'
+ * Convert a Dropbox shared link to a direct download URL.
+ *   www.dropbox.com/…?dl=0  →  dl.dropboxusercontent.com/…?dl=1
  */
+function dropboxDirectUrl(url: string): string {
+  let u = url.replace(/\bdl=0\b/, 'dl=1');
+  // If no dl param at all, add it
+  if (!/[?&]dl=1/.test(u)) {
+    u += (u.includes('?') ? '&' : '?') + 'dl=1';
+  }
+  // Use the content domain (reliable CORS headers)
+  u = u.replace('www.dropbox.com', 'dl.dropboxusercontent.com');
+  return u;
+}
+
+async function fetchFromDropbox(shareUrl: string): Promise<ArrayBuffer> {
+  const downloadUrl = dropboxDirectUrl(shareUrl);
+
+  let resp: Response;
+  try {
+    resp = await fetch(downloadUrl);
+  } catch {
+    throw new Error(
+      'Network error fetching from Dropbox. Check your internet connection.'
+    );
+  }
+
+  if (!resp.ok) {
+    if (resp.status === 404) {
+      throw new Error('Dropbox file not found. The share link may have expired or the file was moved.');
+    }
+    if (resp.status === 403 || resp.status === 401) {
+      throw new Error(
+        'Dropbox access denied. Make sure the link is shared with "Anyone with the link" access.'
+      );
+    }
+    throw new Error(`Dropbox returned HTTP ${resp.status}. Try re-sharing the file.`);
+  }
+
+  const contentLength = resp.headers.get('content-length');
+  if (contentLength && parseInt(contentLength, 10) > 10_000_000) {
+    throw new Error('File is larger than 10MB. Please use a smaller spreadsheet.');
+  }
+
+  return resp.arrayBuffer();
+}
+
+/* ================================================================== */
+/*  OneDrive / SharePoint                                              */
+/* ================================================================== */
+
+function isSharePointUrl(url: string): boolean {
+  return /sharepoint\.com/i.test(url);
+}
+
 function encodeShareToken(shareUrl: string): string {
   const base64 = btoa(unescape(encodeURIComponent(shareUrl)));
   return 'u!' + base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-/* ------------------------------------------------------------------ */
-/*  URL format detection                                               */
-/* ------------------------------------------------------------------ */
-
 /**
- * If the URL already contains `resid` and `authkey` query params
- * (e.g. the user copied the browser address bar while viewing the file),
- * we can build a direct download URL without hitting any API.
+ * If URL has resid + authkey params, build a direct download URL.
  */
 function tryDirectDownloadUrl(url: string): string | null {
   try {
@@ -43,15 +91,9 @@ function tryDirectDownloadUrl(url: string): string | null {
     if (resid && authkey) {
       return `https://onedrive.live.com/download.aspx?resid=${encodeURIComponent(resid)}&authkey=${encodeURIComponent(authkey)}`;
     }
-  } catch {
-    // not a valid URL
-  }
+  } catch { /* ignore */ }
   return null;
 }
-
-/* ------------------------------------------------------------------ */
-/*  Shares-API approach (Graph + legacy)                               */
-/* ------------------------------------------------------------------ */
 
 interface ApiResult {
   downloadUrl?: string;
@@ -61,8 +103,6 @@ interface ApiResult {
 
 async function trySharesApi(shareUrl: string): Promise<ApiResult> {
   const token = encodeShareToken(shareUrl);
-
-  // Endpoints to try, in order of preference
   const endpoints = [
     `https://graph.microsoft.com/v1.0/shares/${token}/driveItem`,
     `https://graph.microsoft.com/v1.0/shares/${token}/root`,
@@ -77,19 +117,15 @@ async function trySharesApi(shareUrl: string): Promise<ApiResult> {
     try {
       const resp = await fetch(url);
       lastStatus = resp.status;
-
       if (resp.ok) {
         const json = await resp.json() as Record<string, unknown>;
         const dlUrl =
           (json['@microsoft.graph.downloadUrl'] as string | undefined) ||
           (json['@content.downloadUrl'] as string | undefined);
         if (dlUrl) return { downloadUrl: dlUrl, lastStatus, lastError: '' };
-        // Got 200 but no download URL — keep trying
         lastError = 'Response missing download URL';
         continue;
       }
-
-      // Parse error detail
       try {
         const errBody = await resp.json() as Record<string, unknown>;
         const errObj = errBody.error as Record<string, unknown> | undefined;
@@ -97,23 +133,12 @@ async function trySharesApi(shareUrl: string): Promise<ApiResult> {
       } catch {
         lastError = `HTTP ${resp.status}`;
       }
-
-      // 401/403 means auth required — no point trying more endpoints on same host
-      if (resp.status === 401 || resp.status === 403) {
-        // but DO try the other host
-        continue;
-      }
     } catch {
       lastError = 'Network/CORS error';
     }
   }
-
   return { lastStatus, lastError };
 }
-
-/* ------------------------------------------------------------------ */
-/*  Direct-download fallback (using /content path with redirect)       */
-/* ------------------------------------------------------------------ */
 
 async function tryDirectContent(shareUrl: string): Promise<ArrayBuffer | null> {
   const token = encodeShareToken(shareUrl);
@@ -126,86 +151,86 @@ async function tryDirectContent(shareUrl: string): Promise<ArrayBuffer | null> {
       const resp = await fetch(url);
       if (resp.ok) {
         const ct = resp.headers.get('content-type') || '';
-        // Make sure we got binary data, not an HTML error page
-        if (!ct.includes('html')) {
-          return resp.arrayBuffer();
-        }
+        if (!ct.includes('html')) return resp.arrayBuffer();
       }
-    } catch {
-      // CORS block or network error — skip
-    }
+    } catch { /* CORS or network — skip */ }
   }
   return null;
 }
 
-/* ------------------------------------------------------------------ */
+async function fetchFromOneDrive(shareUrl: string): Promise<ArrayBuffer> {
+  // Check if SharePoint URL — these require auth and won't work from the browser
+  if (isSharePointUrl(shareUrl)) {
+    throw new Error(
+      'SharePoint / OneDrive for Business links require authentication and cannot be accessed from this browser app. ' +
+      'Please upload the file to Dropbox instead, share it with "Anyone with the link", and paste the Dropbox link here.'
+    );
+  }
+
+  // Attempt 1: direct download (resid + authkey in URL)
+  const directUrl = tryDirectDownloadUrl(shareUrl);
+  if (directUrl) {
+    try {
+      const resp = await fetch(directUrl);
+      if (resp.ok) return resp.arrayBuffer();
+    } catch { /* fall through */ }
+  }
+
+  // Attempt 2: Shares metadata API → pre-auth download URL
+  const apiResult = await trySharesApi(shareUrl);
+  if (apiResult.downloadUrl) {
+    let fileResponse: Response;
+    try {
+      fileResponse = await fetch(apiResult.downloadUrl);
+    } catch {
+      throw new Error('Network error downloading file. Check your internet connection.');
+    }
+    if (!fileResponse.ok) {
+      throw new Error(`Failed to download file (HTTP ${fileResponse.status}).`);
+    }
+    const cl = fileResponse.headers.get('content-length');
+    if (cl && parseInt(cl, 10) > 10_000_000) {
+      throw new Error('File is larger than 10MB.');
+    }
+    return fileResponse.arrayBuffer();
+  }
+
+  // Attempt 3: Direct /content path
+  const directBuffer = await tryDirectContent(shareUrl);
+  if (directBuffer) {
+    if (directBuffer.byteLength > 10_000_000) throw new Error('File is larger than 10MB.');
+    return directBuffer;
+  }
+
+  // All failed
+  if (apiResult.lastStatus === 401 || apiResult.lastStatus === 403) {
+    throw new Error(
+      'Access denied. If using OneDrive for Business, it requires authentication. ' +
+      'Please upload the file to Dropbox instead, share it, and paste the Dropbox link.'
+    );
+  }
+
+  throw new Error(
+    `Could not access the shared file (${apiResult.lastError}). ` +
+    'Tip: Upload the file to Dropbox, right-click → "Copy link", and paste the Dropbox link here.'
+  );
+}
+
+/* ================================================================== */
 /*  Public API                                                         */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 
 /**
- * Fetch an Excel file from a OneDrive share URL.
+ * Fetch an Excel file from a Dropbox or OneDrive share URL.
  * Returns raw bytes as an ArrayBuffer suitable for xlsx.read().
  */
 export async function fetchExcelFromOneDrive(shareUrl: string): Promise<ArrayBuffer> {
   const trimmed = shareUrl.trim();
   if (!trimmed) throw new Error('Share URL is empty');
 
-  // ---- Attempt 1: direct download URL (resid + authkey in the URL) ----
-  const directUrl = tryDirectDownloadUrl(trimmed);
-  if (directUrl) {
-    try {
-      const resp = await fetch(directUrl);
-      if (resp.ok) {
-        return resp.arrayBuffer();
-      }
-    } catch {
-      // fall through to API approach
-    }
+  if (isDropboxUrl(trimmed)) {
+    return fetchFromDropbox(trimmed);
   }
 
-  // ---- Attempt 2: Shares metadata API → pre-auth download URL ----
-  const apiResult = await trySharesApi(trimmed);
-
-  if (apiResult.downloadUrl) {
-    let fileResponse: Response;
-    try {
-      fileResponse = await fetch(apiResult.downloadUrl);
-    } catch {
-      throw new Error('Network error downloading the file. Check your internet connection.');
-    }
-    if (!fileResponse.ok) {
-      throw new Error(`Failed to download file (HTTP ${fileResponse.status}). Try syncing again.`);
-    }
-    const contentLength = fileResponse.headers.get('content-length');
-    if (contentLength && parseInt(contentLength, 10) > 10_000_000) {
-      throw new Error('File is larger than 10MB. Please use a smaller spreadsheet.');
-    }
-    return fileResponse.arrayBuffer();
-  }
-
-  // ---- Attempt 3: Direct /content path (last resort) ----
-  const directBuffer = await tryDirectContent(trimmed);
-  if (directBuffer) {
-    if (directBuffer.byteLength > 10_000_000) {
-      throw new Error('File is larger than 10MB. Please use a smaller spreadsheet.');
-    }
-    return directBuffer;
-  }
-
-  // ---- All attempts failed — give a helpful error ----
-  if (apiResult.lastStatus === 401 || apiResult.lastStatus === 403) {
-    throw new Error(
-      'Access denied. Make sure the file is shared with "Anyone with the link" in OneDrive, not "People in your organization".'
-    );
-  }
-  if (apiResult.lastStatus === 404) {
-    throw new Error('File not found. The share link may have expired or been deleted.');
-  }
-
-  throw new Error(
-    `Could not access the shared file (${apiResult.lastError}). ` +
-    'Tips: (1) In OneDrive, right-click the file → Share → "Anyone with the link". ' +
-    '(2) Copy the share link and paste it here. ' +
-    '(3) If that still fails, open the file in OneDrive web and copy the full URL from your browser address bar.'
-  );
+  return fetchFromOneDrive(trimmed);
 }
