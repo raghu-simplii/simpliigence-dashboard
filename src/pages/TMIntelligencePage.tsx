@@ -2,18 +2,17 @@ import { useMemo, useState } from 'react';
 import { Radar, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import { useTMStore } from '../store';
 import { calculateConfidenceScores } from '../lib/calculations/confidence';
-import { ROLE_LABELS, SPECIALIZATION_LABELS } from '../constants';
+import { SPECIALIZATION_LABELS } from '../constants';
 import type { ZohoPosition, Specialization } from '../types';
-import { Button, Badge, Card, StatCard, EmptyState } from '../components/ui';
+import { Button, Card, StatCard, EmptyState } from '../components/ui';
 import { PageHeader } from '../components/shared/PageHeader';
 import { nanoid } from 'nanoid';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line,
 } from 'recharts';
 
 export default function TMIntelligencePage() {
-  const { positions, syncState, setPositions, updateSyncState } = useTMStore();
+  const { positions, syncState, setPositions } = useTMStore();
   const [loading, setLoading] = useState(false);
 
   const metrics = useMemo(() => calculateConfidenceScores(positions), [positions]);
@@ -161,7 +160,7 @@ export default function TMIntelligencePage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                   <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                   <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} />
-                  <Tooltip formatter={(v: number) => `${v}%`} />
+                  <Tooltip formatter={(v) => `${v}%`} />
                   <Bar dataKey="fillRate" fill="#10b981" radius={[4, 4, 0, 0]} name="Fill Rate %" />
                 </BarChart>
               </ResponsiveContainer>

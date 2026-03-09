@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useTeamStore } from '../store';
 import { StatCard, Card } from '../components/ui';
-import { StatusBadge, Badge } from '../components/ui';
+import { Badge } from '../components/ui';
 import { PageHeader } from '../components/shared/PageHeader';
 import { calculateUtilization } from '../lib/calculations/utilization';
 import { ROLE_LABELS, SENIORITY_LABELS, SPECIALIZATION_LABELS } from '../constants';
@@ -44,7 +44,7 @@ export default function BenchUtilizationPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 12 }} />
                 <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 12 }} />
-                <Tooltip formatter={(v: number) => `${v}%`} />
+                <Tooltip formatter={(v) => `${v}%`} />
                 <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} name="Utilization %" />
               </BarChart>
             </ResponsiveContainer>
@@ -60,7 +60,7 @@ export default function BenchUtilizationPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 12 }} />
                 <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 12 }} />
-                <Tooltip formatter={(v: number) => `${v}%`} />
+                <Tooltip formatter={(v) => `${v}%`} />
                 <Bar dataKey="value" fill="#10b981" radius={[0, 4, 4, 0]} name="Utilization %" />
               </BarChart>
             </ResponsiveContainer>

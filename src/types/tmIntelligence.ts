@@ -1,4 +1,4 @@
-import { Role, Seniority, Specialization } from './team';
+import type { Role, Seniority, Specialization } from './team';
 
 export interface ZohoPosition {
   zohoId: string;

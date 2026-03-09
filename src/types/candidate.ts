@@ -1,5 +1,5 @@
-import { ID, Timestamped } from './common';
-import { Role, Seniority, Specialization } from './team';
+import type { ID, Timestamped } from './common';
+import type { Role, Seniority, Specialization } from './team';
 
 export type HiringStage =
   | 'sourcing'

@@ -3,7 +3,7 @@ import { Users } from 'lucide-react';
 import { useTeamStore, useFinancialStore } from '../store';
 import { useProjectStore } from '../store';
 import type { TeamMember, Role, Seniority, Specialization, MemberStatus } from '../types';
-import { ROLES, SENIORITY_LEVELS, SPECIALIZATIONS, MEMBER_STATUSES, ROLE_LABELS, SENIORITY_LABELS, SPECIALIZATION_LABELS, STATUS_LABELS } from '../constants';
+import { ROLES, SENIORITY_LEVELS, SPECIALIZATIONS, MEMBER_STATUSES, ROLE_LABELS, SENIORITY_LABELS, SPECIALIZATION_LABELS } from '../constants';
 import { Button, StatusBadge, Badge, Drawer, Input, Select, MultiSelect, Textarea, EmptyState, ConfirmDialog } from '../components/ui';
 import { PageHeader } from '../components/shared/PageHeader';
 import { formatINR, getMemberMonthlyCTC } from '../lib/calculations/financial';

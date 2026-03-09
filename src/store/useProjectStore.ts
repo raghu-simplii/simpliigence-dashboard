@@ -56,7 +56,7 @@ export const useProjectStore = create<ProjectState>()(
             billingType: (p as Record<string, unknown>).billingType ?? 'fixed',
           }));
         }
-        return state as ProjectState;
+        return state as unknown as ProjectState;
       },
     }
   )

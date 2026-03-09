@@ -1,5 +1,5 @@
 import { useTeamStore, useProjectStore, useCandidateStore, useTMStore, useFinancialStore } from '../store';
-import { Button, Card, Input } from '../components/ui';
+import { Button, Card } from '../components/ui';
 import { PageHeader } from '../components/shared/PageHeader';
 import { Download, Trash2, Database, Plus, X, FileSpreadsheet } from 'lucide-react';
 import { loadSeedIntoStores } from '../data/employeeSeed';
@@ -14,7 +14,7 @@ export default function SettingsPage() {
   const candidateStore = useCandidateStore();
   const tmStore = useTMStore();
   const financialStore = useFinancialStore();
-  const { rateCards, hiringBudgets, settings, updateRateCard, initializeDefaultRateCards, addHiringBudget, updateHiringBudget, deleteHiringBudget, updateSettings } = financialStore;
+  const { rateCards, hiringBudgets, settings, updateRateCard, initializeDefaultRateCards, addHiringBudget, deleteHiringBudget, updateSettings } = financialStore;
   const [confirmClear, setConfirmClear] = useState(false);
   const [confirmSeed, setConfirmSeed] = useState(false);
   const [newBudgetPeriod, setNewBudgetPeriod] = useState('');

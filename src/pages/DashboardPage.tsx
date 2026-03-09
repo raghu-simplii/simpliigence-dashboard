@@ -7,7 +7,6 @@ import { calculateUtilization } from '../lib/calculations/utilization';
 import { calculateSupplyDemandGaps } from '../lib/calculations/supplyDemand';
 import { calculateFinancialSnapshot, formatINR } from '../lib/calculations/financial';
 import { ROLE_LABELS, SENIORITY_LABELS, SPECIALIZATION_LABELS } from '../constants';
-import { CHART_COLORS } from '../constants/brand';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -55,13 +54,6 @@ export default function DashboardPage() {
     Supply: g.supply,
     Demand: g.demand,
   }));
-
-  const roleUtilData = Object.entries(utilization.byRole)
-    .filter(([, val]) => val > 0 || members.some((m) => m.role === (Object.keys(ROLE_LABELS) as any).find((k: string) => k === Object.keys(utilization.byRole).find((r) => r === Object.entries(utilization.byRole).find(([k2]) => k2 === Object.keys(utilization.byRole)[0])?.[0]))))
-    .map(([role, pct]) => ({
-      name: ROLE_LABELS[role as keyof typeof ROLE_LABELS] || role,
-      Utilization: pct,
-    }));
 
   const benchMembers = members.filter((m) => m.status === 'bench');
   const rollingOff = members.filter((m) => m.status === 'rolling_off');

@@ -61,7 +61,7 @@ export const useTeamStore = create<TeamState>()(
             utilizationPercent: (m as Record<string, unknown>).status === 'deployed' ? 100 : 0,
           }));
         }
-        return state as TeamState;
+        return state as unknown as TeamState;
       },
     }
   )

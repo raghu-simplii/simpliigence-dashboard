@@ -1,13 +1,12 @@
 import { useState, useMemo } from 'react';
 import { FolderKanban } from 'lucide-react';
-import { useProjectStore, useTeamStore } from '../store';
+import { useProjectStore } from '../store';
 import type { Project, ProjectType, ProjectStatus, StaffingRequirement, Role, Seniority, Specialization } from '../types';
-import { PROJECT_TYPES, PROJECT_STATUSES, PROJECT_TYPE_LABELS, PROJECT_STATUS_LABELS, ROLES, SENIORITY_LEVELS, SPECIALIZATIONS, PRIORITY_OPTIONS, ROLE_LABELS, SENIORITY_LABELS, SPECIALIZATION_LABELS, BILLING_TYPE_OPTIONS } from '../constants';
+import { PROJECT_TYPES, PROJECT_STATUSES, PROJECT_TYPE_LABELS, ROLES, SENIORITY_LEVELS, SPECIALIZATIONS, PRIORITY_OPTIONS, BILLING_TYPE_OPTIONS } from '../constants';
 import { formatINR } from '../lib/calculations/financial';
 import { Button, StatusBadge, Badge, Drawer, Input, Select, MultiSelect, Textarea, EmptyState, ConfirmDialog } from '../components/ui';
 import { PageHeader } from '../components/shared/PageHeader';
 import { nanoid } from 'nanoid';
-import { format } from 'date-fns';
 
 const emptyForm = (): Omit<Project, 'id' | 'createdAt' | 'updatedAt'> => ({
   name: '', clientName: '', type: 'fixed_12w', status: 'pipeline',
@@ -22,7 +21,6 @@ const emptyReq = (): StaffingRequirement => ({
 
 export default function ProjectPipelinePage() {
   const { projects, addProject, updateProject, deleteProject } = useProjectStore();
-  const { members } = useTeamStore();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm());

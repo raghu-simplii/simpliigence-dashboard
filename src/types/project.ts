@@ -1,7 +1,7 @@
-import { ID, Timestamped } from './common';
-import { Role, Seniority, Specialization } from './team';
+import type { ID, Timestamped } from './common';
+import type { Role, Seniority, Specialization } from './team';
 
-export type ProjectType = 'fixed_6w' | 'fixed_12w' | 'fixed_6m' | 'tam';
+export type ProjectType = 'fixed_6w' | 'fixed_12w' | 'fixed_6m' | 'tam' | 'tm_ongoing' | 'tm_6m';
 
 export type ProjectStatus =
   | 'pipeline'

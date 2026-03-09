@@ -126,12 +126,14 @@ export function buildSeedData() {
     return {
       id: nanoid(),
       name: es.name,
+      email: '',
       role: es.role,
       seniority: es.seniority,
       specializations: [],
       status: es.status,
       currentProjectId: es.primaryProject ? (projectIdMap[es.primaryProject] ?? null) : null,
       availableFrom: es.status === 'bench' ? new Date().toISOString().split('T')[0] : '',
+      benchSince: es.status === 'bench' ? new Date().toISOString().split('T')[0] : null,
       notes: es.notes,
       ctcMonthly: null,           // use rate-card fallback
       billingRateMonthly: billingMonthly,

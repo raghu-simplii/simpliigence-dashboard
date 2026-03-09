@@ -56,7 +56,7 @@ export function getMemberMonthlyBilling(
 
 export function calculateFinancialSnapshot(
   members: TeamMember[],
-  projects: Project[],
+  _projects: Project[],
   candidates: Candidate[],
   rateCards: RateCard[],
   hiringBudgets: HiringBudget[]

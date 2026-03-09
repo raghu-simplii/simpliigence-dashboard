@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
 import { UserPlus } from 'lucide-react';
-import { useCandidateStore, useProjectStore } from '../store';
+import { useCandidateStore } from '../store';
 import type { Candidate, HiringStage, Role, Seniority, Specialization } from '../types';
-import { HIRING_STAGES, ACTIVE_STAGES, STAGE_LABELS, STAGE_COLORS, CANDIDATE_SOURCES, ROLES, SENIORITY_LEVELS, SPECIALIZATIONS, ROLE_LABELS, SENIORITY_LABELS } from '../constants';
+import { HIRING_STAGES, ACTIVE_STAGES, STAGE_LABELS, STAGE_COLORS, CANDIDATE_SOURCES, ROLES, SENIORITY_LEVELS, SPECIALIZATIONS, ROLE_LABELS } from '../constants';
 import { Button, Badge, Drawer, Input, Select, MultiSelect, Textarea, EmptyState, ConfirmDialog } from '../components/ui';
 import { PageHeader } from '../components/shared/PageHeader';
 
@@ -15,7 +15,6 @@ const emptyForm = (): Omit<Candidate, 'id' | 'createdAt' | 'updatedAt'> => ({
 
 export default function HiringPipelinePage() {
   const { candidates, addCandidate, updateCandidate, deleteCandidate, advanceStage } = useCandidateStore();
-  const { projects } = useProjectStore();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm());

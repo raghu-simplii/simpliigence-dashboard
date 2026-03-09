@@ -1,5 +1,5 @@
 import { useMemo, useEffect } from 'react';
-import { IndianRupee, TrendingUp, TrendingDown, Flame, Wallet } from 'lucide-react';
+import { IndianRupee, TrendingUp, TrendingDown, Flame } from 'lucide-react';
 import { useTeamStore, useProjectStore, useCandidateStore, useFinancialStore } from '../store';
 import { StatCard, Card, Badge, EmptyState } from '../components/ui';
 import { PageHeader } from '../components/shared/PageHeader';
@@ -87,7 +87,7 @@ export default function FinancialsPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₹${formatINR(v)}`} />
-                <Tooltip formatter={(value: number) => [`₹${formatINR(value)}`, '']} />
+                <Tooltip formatter={(value) => [`₹${formatINR(value as number)}`, '']} />
                 <Bar dataKey="value" radius={[6, 6, 0, 0]}>
                   {revCostData.map((entry, i) => (
                     <Cell key={i} fill={entry.fill} />
@@ -119,7 +119,7 @@ export default function FinancialsPage() {
                   <Cell fill="#ef4444" />
                   <Cell fill="#10b981" />
                 </Pie>
-                <Tooltip formatter={(value: number) => [`₹${formatINR(value)}`, '']} />
+                <Tooltip formatter={(value) => [`₹${formatINR(value as number)}`, '']} />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>

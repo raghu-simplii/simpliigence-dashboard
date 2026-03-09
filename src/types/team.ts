@@ -1,4 +1,4 @@
-import { ID, Timestamped } from './common';
+import type { ID, Timestamped } from './common';
 
 export type Role =
   | 'salesforce_developer'
