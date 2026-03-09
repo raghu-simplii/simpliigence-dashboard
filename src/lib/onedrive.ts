@@ -1,52 +1,75 @@
 /**
- * OneDrive public shares API integration.
+ * OneDrive / SharePoint file download for publicly shared Excel files.
  *
- * Two-step approach:
- * 1. Encode the share URL → call the shares API to get a pre-authenticated download URL
- * 2. Fetch the file from that direct URL (no auth needed, CORS-friendly)
+ * Supports multiple URL formats:
+ *  - Short share links:  https://1drv.ms/x/c/…
+ *  - Full share links:   https://onedrive.live.com/…  or  https://…sharepoint.com/…
+ *  - Direct embed links:  https://onedrive.live.com/download?resid=…&authkey=…
  *
- * Works with "Anyone with the link" shared files.
+ * Strategy:
+ *  1. Try Microsoft Graph shares API (graph.microsoft.com)  — current endpoint
+ *  2. Try legacy OneDrive shares API (api.onedrive.com)     — fallback
+ *  3. If the URL contains resid + authkey, build a direct download URL
  */
+
+/* ------------------------------------------------------------------ */
+/*  Encoding helper                                                    */
+/* ------------------------------------------------------------------ */
 
 /**
- * Encode a OneDrive/SharePoint share URL into an API-safe token.
- *
- * Algorithm (from Microsoft docs):
- * 1. UTF-8 encode the URL, then Base64-encode the bytes
- * 2. Replace '+' → '-', '/' → '_', remove trailing '='
- * 3. Prepend 'u!'
+ * Encode a share URL into a Graph-API-safe token.
+ * Algorithm per Microsoft docs:
+ *   UTF-8 bytes → base64 → URL-safe (+→-, /→_, strip =) → prepend 'u!'
  */
-export function encodeShareUrl(shareUrl: string): string {
-  const trimmed = shareUrl.trim();
-  if (!trimmed) throw new Error('Share URL is empty');
-
-  // UTF-8 safe base64 encoding (matches Microsoft's C# Encoding.UTF8.GetBytes)
-  const base64 = btoa(unescape(encodeURIComponent(trimmed)));
-
-  // URL-safe base64: replace + with -, / with _, strip trailing =
+function encodeShareToken(shareUrl: string): string {
+  const base64 = btoa(unescape(encodeURIComponent(shareUrl)));
   return 'u!' + base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-/**
- * Fetch an Excel file from a OneDrive share URL.
- *
- * Strategy:
- * 1. Call the shares metadata API to get a pre-authenticated @content.downloadUrl
- * 2. Download the file from that direct CDN URL
- *
- * This avoids the /content redirect which causes CORS issues.
- */
-export async function fetchExcelFromOneDrive(shareUrl: string): Promise<ArrayBuffer> {
-  const encoded = encodeShareUrl(shareUrl);
+/* ------------------------------------------------------------------ */
+/*  URL format detection                                               */
+/* ------------------------------------------------------------------ */
 
-  // --- Step 1: Get driveItem metadata (contains a pre-auth download URL) ---
-  // Try both API paths — /driveItem (newer) and /root (legacy)
+/**
+ * If the URL already contains `resid` and `authkey` query params
+ * (e.g. the user copied the browser address bar while viewing the file),
+ * we can build a direct download URL without hitting any API.
+ */
+function tryDirectDownloadUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    const resid = parsed.searchParams.get('resid');
+    const authkey = parsed.searchParams.get('authkey');
+    if (resid && authkey) {
+      return `https://onedrive.live.com/download.aspx?resid=${encodeURIComponent(resid)}&authkey=${encodeURIComponent(authkey)}`;
+    }
+  } catch {
+    // not a valid URL
+  }
+  return null;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Shares-API approach (Graph + legacy)                               */
+/* ------------------------------------------------------------------ */
+
+interface ApiResult {
+  downloadUrl?: string;
+  lastStatus: number;
+  lastError: string;
+}
+
+async function trySharesApi(shareUrl: string): Promise<ApiResult> {
+  const token = encodeShareToken(shareUrl);
+
+  // Endpoints to try, in order of preference
   const endpoints = [
-    `https://api.onedrive.com/v1.0/shares/${encoded}/driveItem`,
-    `https://api.onedrive.com/v1.0/shares/${encoded}/root`,
+    `https://graph.microsoft.com/v1.0/shares/${token}/driveItem`,
+    `https://graph.microsoft.com/v1.0/shares/${token}/root`,
+    `https://api.onedrive.com/v1.0/shares/${token}/driveItem`,
+    `https://api.onedrive.com/v1.0/shares/${token}/root`,
   ];
 
-  let metaJson: Record<string, unknown> | null = null;
   let lastStatus = 0;
   let lastError = '';
 
@@ -56,11 +79,17 @@ export async function fetchExcelFromOneDrive(shareUrl: string): Promise<ArrayBuf
       lastStatus = resp.status;
 
       if (resp.ok) {
-        metaJson = await resp.json() as Record<string, unknown>;
-        break;
+        const json = await resp.json() as Record<string, unknown>;
+        const dlUrl =
+          (json['@microsoft.graph.downloadUrl'] as string | undefined) ||
+          (json['@content.downloadUrl'] as string | undefined);
+        if (dlUrl) return { downloadUrl: dlUrl, lastStatus, lastError: '' };
+        // Got 200 but no download URL — keep trying
+        lastError = 'Response missing download URL';
+        continue;
       }
 
-      // Try to parse error detail from response
+      // Parse error detail
       try {
         const errBody = await resp.json() as Record<string, unknown>;
         const errObj = errBody.error as Record<string, unknown> | undefined;
@@ -68,59 +97,115 @@ export async function fetchExcelFromOneDrive(shareUrl: string): Promise<ArrayBuf
       } catch {
         lastError = `HTTP ${resp.status}`;
       }
+
+      // 401/403 means auth required — no point trying more endpoints on same host
+      if (resp.status === 401 || resp.status === 403) {
+        // but DO try the other host
+        continue;
+      }
     } catch {
-      lastError = 'Network error';
+      lastError = 'Network/CORS error';
     }
   }
 
-  if (!metaJson) {
-    if (lastStatus === 401 || lastStatus === 403) {
-      throw new Error(
-        'Access denied. Make sure the file is shared with "Anyone with the link" in OneDrive.'
-      );
+  return { lastStatus, lastError };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Direct-download fallback (using /content path with redirect)       */
+/* ------------------------------------------------------------------ */
+
+async function tryDirectContent(shareUrl: string): Promise<ArrayBuffer | null> {
+  const token = encodeShareToken(shareUrl);
+  const urls = [
+    `https://api.onedrive.com/v1.0/shares/${token}/root/content`,
+    `https://api.onedrive.com/v1.0/shares/${token}/driveItem/content`,
+  ];
+  for (const url of urls) {
+    try {
+      const resp = await fetch(url);
+      if (resp.ok) {
+        const ct = resp.headers.get('content-type') || '';
+        // Make sure we got binary data, not an HTML error page
+        if (!ct.includes('html')) {
+          return resp.arrayBuffer();
+        }
+      }
+    } catch {
+      // CORS block or network error — skip
     }
-    if (lastStatus === 404) {
-      throw new Error(
-        'File not found. The share link may have expired or the file was deleted.'
-      );
+  }
+  return null;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Public API                                                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Fetch an Excel file from a OneDrive share URL.
+ * Returns raw bytes as an ArrayBuffer suitable for xlsx.read().
+ */
+export async function fetchExcelFromOneDrive(shareUrl: string): Promise<ArrayBuffer> {
+  const trimmed = shareUrl.trim();
+  if (!trimmed) throw new Error('Share URL is empty');
+
+  // ---- Attempt 1: direct download URL (resid + authkey in the URL) ----
+  const directUrl = tryDirectDownloadUrl(trimmed);
+  if (directUrl) {
+    try {
+      const resp = await fetch(directUrl);
+      if (resp.ok) {
+        return resp.arrayBuffer();
+      }
+    } catch {
+      // fall through to API approach
     }
+  }
+
+  // ---- Attempt 2: Shares metadata API → pre-auth download URL ----
+  const apiResult = await trySharesApi(trimmed);
+
+  if (apiResult.downloadUrl) {
+    let fileResponse: Response;
+    try {
+      fileResponse = await fetch(apiResult.downloadUrl);
+    } catch {
+      throw new Error('Network error downloading the file. Check your internet connection.');
+    }
+    if (!fileResponse.ok) {
+      throw new Error(`Failed to download file (HTTP ${fileResponse.status}). Try syncing again.`);
+    }
+    const contentLength = fileResponse.headers.get('content-length');
+    if (contentLength && parseInt(contentLength, 10) > 10_000_000) {
+      throw new Error('File is larger than 10MB. Please use a smaller spreadsheet.');
+    }
+    return fileResponse.arrayBuffer();
+  }
+
+  // ---- Attempt 3: Direct /content path (last resort) ----
+  const directBuffer = await tryDirectContent(trimmed);
+  if (directBuffer) {
+    if (directBuffer.byteLength > 10_000_000) {
+      throw new Error('File is larger than 10MB. Please use a smaller spreadsheet.');
+    }
+    return directBuffer;
+  }
+
+  // ---- All attempts failed — give a helpful error ----
+  if (apiResult.lastStatus === 401 || apiResult.lastStatus === 403) {
     throw new Error(
-      `Could not access the shared file (${lastError}). ` +
-      'Please verify the OneDrive share link is correct and the file is shared with "Anyone with the link".'
+      'Access denied. Make sure the file is shared with "Anyone with the link" in OneDrive, not "People in your organization".'
     );
   }
-
-  // --- Step 2: Extract the pre-authenticated download URL ---
-  const downloadUrl =
-    (metaJson['@content.downloadUrl'] as string | undefined) ||
-    (metaJson['@microsoft.graph.downloadUrl'] as string | undefined);
-
-  if (!downloadUrl) {
-    throw new Error(
-      'OneDrive did not provide a download URL. ' +
-      'Make sure the file is shared with "Anyone with the link" (not "People in your organization").'
-    );
+  if (apiResult.lastStatus === 404) {
+    throw new Error('File not found. The share link may have expired or been deleted.');
   }
 
-  // --- Step 3: Download the actual file ---
-  let fileResponse: Response;
-  try {
-    fileResponse = await fetch(downloadUrl);
-  } catch {
-    throw new Error(
-      'Network error downloading the file. Check your internet connection and try again.'
-    );
-  }
-
-  if (!fileResponse.ok) {
-    throw new Error(`Failed to download file (HTTP ${fileResponse.status}). Try syncing again.`);
-  }
-
-  // Guard against very large files
-  const contentLength = fileResponse.headers.get('content-length');
-  if (contentLength && parseInt(contentLength, 10) > 10_000_000) {
-    throw new Error('File is larger than 10MB. Please use a smaller spreadsheet.');
-  }
-
-  return fileResponse.arrayBuffer();
+  throw new Error(
+    `Could not access the shared file (${apiResult.lastError}). ` +
+    'Tips: (1) In OneDrive, right-click the file → Share → "Anyone with the link". ' +
+    '(2) Copy the share link and paste it here. ' +
+    '(3) If that still fails, open the file in OneDrive web and copy the full URL from your browser address bar.'
+  );
 }
