@@ -7,7 +7,7 @@ import { deriveEmployeeSummaries, deriveProjectSummaries } from '../lib/parseSpr
 import { MONTHS } from '../types/forecast';
 import { CHART_COLORS } from '../constants/brand';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell,
 } from 'recharts';
 
@@ -77,10 +77,10 @@ export default function FinancialsPage() {
       <PageHeader title="Financials" subtitle="Revenue estimates based on rate cards and forecasted hours" />
 
       <div className="grid grid-cols-4 gap-4 mb-6">
-        <StatCard icon={DollarSign} label="Total Revenue (USD)" value={`$${totalRevenue.toLocaleString()}`} />
-        <StatCard icon={DollarSign} label="Total Revenue (INR)" value={`₹${Math.round(totalRevenueINR).toLocaleString()}`} />
-        <StatCard icon={TrendingUp} label="Billable %" value={`${billablePercent}%`} />
-        <StatCard icon={TrendingUp} label="Avg Rev/Hr" value={totalHours > 0 ? `$${Math.round(totalRevenue / billableHours)}` : '—'} />
+        <StatCard icon={<DollarSign size={24} />} label="Total Revenue (USD)" value={`$${totalRevenue.toLocaleString()}`} />
+        <StatCard icon={<DollarSign size={24} />} label="Total Revenue (INR)" value={`₹${Math.round(totalRevenueINR).toLocaleString()}`} />
+        <StatCard icon={<TrendingUp size={24} />} label="Billable %" value={`${billablePercent}%`} />
+        <StatCard icon={<TrendingUp size={24} />} label="Avg Rev/Hr" value={totalHours > 0 ? `$${Math.round(totalRevenue / billableHours)}` : '—'} />
       </div>
 
       <div className="grid grid-cols-2 gap-4 mb-6">

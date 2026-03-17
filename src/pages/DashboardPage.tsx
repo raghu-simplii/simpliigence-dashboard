@@ -24,11 +24,6 @@ export default function DashboardPage() {
   const totalHours = employees.reduce((s, e) => s + e.totalHours, 0);
   const totalRevenue = projects.reduce((s, p) => s + p.estimatedRevenue, 0);
 
-  // Utilization: avg percentage based on 160 hrs/month capacity over 6 months (960 max)
-  const avgUtilization = totalEmployees > 0
-    ? Math.round(employees.reduce((s, e) => s + (e.totalHours / 960) * 100, 0) / totalEmployees)
-    : 0;
-
   // Monthly hours trend
   const monthlyTrend = useMemo(() =>
     MONTHS.map((m) => ({
@@ -71,10 +66,10 @@ export default function DashboardPage() {
       <PageHeader title="Command Center" subtitle="Resource forecasting overview — Jan to Jun 2026" />
 
       <div className="grid grid-cols-4 gap-4 mb-6">
-        <StatCard icon={Users} label="Team Size" value={totalEmployees} />
-        <StatCard icon={FolderKanban} label="Active Projects" value={totalProjects} />
-        <StatCard icon={Clock} label="Total Forecasted Hours" value={totalHours.toLocaleString()} />
-        <StatCard icon={DollarSign} label="Est. Revenue (USD)" value={`$${Math.round(totalRevenue).toLocaleString()}`} />
+        <StatCard icon={<Users size={24} />} label="Team Size" value={totalEmployees} />
+        <StatCard icon={<FolderKanban size={24} />} label="Active Projects" value={totalProjects} />
+        <StatCard icon={<Clock size={24} />} label="Total Forecasted Hours" value={totalHours.toLocaleString()} />
+        <StatCard icon={<DollarSign size={24} />} label="Est. Revenue (USD)" value={`$${Math.round(totalRevenue).toLocaleString()}`} />
       </div>
 
       <div className="grid grid-cols-2 gap-4 mb-6">
@@ -93,7 +88,7 @@ export default function DashboardPage() {
         <Card title="Hours by Project">
           <ResponsiveContainer width="100%" height={280}>
             <PieChart>
-              <Pie data={projectPie} cx="50%" cy="50%" outerRadius={100} innerRadius={50} paddingAngle={2} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+              <Pie data={projectPie} cx="50%" cy="50%" outerRadius={100} innerRadius={50} paddingAngle={2} dataKey="value" label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}>
                 {projectPie.map((_, i) => (
                   <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                 ))}
