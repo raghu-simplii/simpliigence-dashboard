@@ -1,50 +1,31 @@
 /**
- * Parse the "Forecasting Hrs" sheet from an Excel workbook and transform
- * the rows into TeamMember[] and Project[] for the Zustand stores.
+ * Parse the "Forecasting Hrs" sheet and extract all forecast data.
  *
- * Spreadsheet layout (verified from "List of all Employees (1).xlsx"):
- *   Row 1: Headers — A=Employee Name, B=Notes, C=Role, D=Rate Card,
- *          E=SI Employee?, F=Contractor, G=Active Projects,
- *          H+=weekly date columns (Excel date serial numbers)
- *   Rows 2+: Data — one row per employee-project combination.
- *          Employees on multiple projects appear in multiple rows.
+ * Layout: A=Employee Name, B=Notes, C=Role, D=Rate Card, E=SI Employee?,
+ *         F=Contractor, G=Active Projects, H+= weekly date columns
+ *         interspersed with monthly total columns like "Jan Full Month".
  */
-import type { TeamMember, Role, Seniority } from '../types/team';
-import type { Project, ProjectType, ProjectStatus } from '../types/project';
-import { nanoid } from 'nanoid';
+import type { ForecastAssignment, Month, EmployeeSummary, ProjectSummary } from '../types/forecast';
 
-// ── Raw row extracted from the spreadsheet ─────────────────────
+const MONTHS: Month[] = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
 
-export interface SpreadsheetRow {
-  employeeName: string;
-  notes: string;
-  roleText: string;
-  rateUSD: number;
-  isContractor: boolean;
-  projectName: string;
-  weeklyHours: number;
-}
-
-// ── Column indices (0-based) ───────────────────────────────────
-
+// Column indices
 const COL_NAME = 0;
 const COL_NOTES = 1;
 const COL_ROLE = 2;
 const COL_RATE = 3;
-// COL_SI = 4  (not used beyond filtering)
+const COL_SI = 4;
 const COL_CONTRACTOR = 5;
 const COL_PROJECT = 6;
-const FIRST_DATE_COL = 7; // Column H onward = weekly dates
+const FIRST_DATA_COL = 7;
 
 // ── Helpers ────────────────────────────────────────────────────
 
-/** Strip trailing asterisks and extra whitespace from employee names */
 function cleanName(raw: unknown): string {
   if (typeof raw !== 'string') return '';
   return raw.replace(/\*+$/, '').trim();
 }
 
-/** Safely read a number cell (could be number, string, or null) */
 function toNumber(val: unknown): number {
   if (typeof val === 'number') return val;
   if (typeof val === 'string') {
@@ -54,7 +35,6 @@ function toNumber(val: unknown): number {
   return 0;
 }
 
-/** Check if a value looks like a boolean TRUE */
 function toBool(val: unknown): boolean {
   if (typeof val === 'boolean') return val;
   if (typeof val === 'string') return val.toLowerCase() === 'true';
@@ -62,270 +42,223 @@ function toBool(val: unknown): boolean {
   return false;
 }
 
-/**
- * Detect which column index has the "latest" date that is ≤ today.
- * SheetJS parses date cells as JS Date objects (when cellDates is true)
- * or as Excel serial numbers (when not).
- */
-function findLatestWeekColumn(headerRow: unknown[]): number {
-  const now = new Date();
-  now.setHours(23, 59, 59, 999); // include all of today
-
-  let bestCol = -1;
-  let bestDate = new Date(0);
-
-  for (let c = FIRST_DATE_COL; c < headerRow.length; c++) {
-    const val = headerRow[c];
-    let d: Date | null = null;
-
-    if (val instanceof Date) {
-      d = val;
-    } else if (typeof val === 'number' && val > 40000 && val < 60000) {
-      // Excel serial date → JS Date (epoch = 1900-01-01, with Excel's leap-year bug)
-      d = new Date((val - 25569) * 86400000);
-    } else if (typeof val === 'string') {
-      const parsed = new Date(val);
-      if (!isNaN(parsed.getTime())) d = parsed;
-    }
-
-    if (d && d <= now && d > bestDate) {
-      bestDate = d;
-      bestCol = c;
-    }
-  }
-
-  // Fallback: if no date columns found ≤ today, use the last populated column
-  if (bestCol === -1) {
-    for (let c = headerRow.length - 1; c >= FIRST_DATE_COL; c--) {
-      if (headerRow[c] != null) { bestCol = c; break; }
-    }
-  }
-
-  return bestCol;
+/** Convert Excel serial date to ISO date string. */
+function excelSerialToISO(serial: number): string {
+  const jsDate = new Date((serial - 25569) * 86400000);
+  return jsDate.toISOString().split('T')[0];
 }
 
-// ── Role / Seniority mapping ───────────────────────────────────
-
-function inferRole(roleText: string): Role {
-  const lower = roleText.toLowerCase();
-  if (lower.includes('business analyst')) return 'business_analyst';
-  if (lower.includes('team lead') || lower.includes('manager')) return 'technical_lead';
-  if (lower.includes('architect')) return 'architect';
-  if (lower.includes('us resource') || lower.includes('project manager')) return 'project_manager';
-  // Salesforce Developer, Senior Salesforce Developer, Salesforce Consultant, Contractor
-  return 'salesforce_developer';
+/** Determine which month a date falls in (Jan–Jun). */
+function dateToMonth(isoDate: string): Month | null {
+  const d = new Date(isoDate);
+  const month = d.getMonth(); // 0=Jan, 5=Jun
+  if (month >= 0 && month <= 5) return MONTHS[month];
+  return null;
 }
 
-function inferSeniority(roleText: string): Seniority {
-  const lower = roleText.toLowerCase();
-  if (lower.includes('junior')) return 'associate';
-  if (lower.includes('senior') || lower.includes(' sr')) return 'senior';
-  if (lower.includes('team lead') || lower.includes('us resource') || lower.includes('manager')) return 'principal';
-  if (lower.includes('consultant')) return 'consultant';
-  return 'consultant'; // default
+/** Check if a header cell is a monthly total label. Returns the month or null. */
+function parseMonthlyTotalLabel(val: unknown): Month | null {
+  if (typeof val !== 'string') return null;
+  const lower = val.toLowerCase();
+  if (lower.includes('jan')) return 'Jan';
+  if (lower.includes('feb')) return 'Feb';
+  if (lower.includes('mar')) return 'Mar';
+  if (lower.includes('apr') || lower.includes('aprint')) return 'Apr';
+  if (lower.includes('may')) return 'May';
+  if (lower.includes('jun')) return 'Jun';
+  return null;
+}
+
+function isDateSerial(val: unknown): val is number {
+  return typeof val === 'number' && val > 40000 && val < 60000;
 }
 
 // ── Main parse function ────────────────────────────────────────
 
-export async function parseForcastingSheet(
+export interface ParseResult {
+  assignments: ForecastAssignment[];
+  weekDates: string[];
+}
+
+export async function parseForecastingSheet(
   buffer: ArrayBuffer,
-  sheetName: string = 'Forecasting Hrs'
-): Promise<SpreadsheetRow[]> {
+  sheetName: string = 'Forecasting Hrs',
+): Promise<ParseResult> {
   const XLSX = await import('xlsx');
-  const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+  const workbook = XLSX.read(buffer, { type: 'array' });
 
   const sheet = workbook.Sheets[sheetName];
   if (!sheet) {
     const available = workbook.SheetNames.join(', ');
-    throw new Error(`Sheet "${sheetName}" not found. Available sheets: ${available}`);
+    throw new Error(`Sheet "${sheetName}" not found. Available: ${available}`);
   }
 
-  // Convert to array-of-arrays (row 0 = headers, row 1+ = data)
   const raw: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
   if (raw.length < 2) throw new Error('Spreadsheet has no data rows.');
 
   const headerRow = raw[0];
-  const weekCol = findLatestWeekColumn(headerRow);
-  if (weekCol < 0) throw new Error('Could not find any weekly date columns in the header row.');
 
-  const rows: SpreadsheetRow[] = [];
+  // ── Classify header columns ──────────────────────────────────
+  const weekColMap = new Map<number, string>();
+  const monthTotalColMap = new Map<number, Month>();
+
+  for (let c = FIRST_DATA_COL; c < headerRow.length; c++) {
+    const val = headerRow[c];
+    const month = parseMonthlyTotalLabel(val);
+    if (month) {
+      monthTotalColMap.set(c, month);
+    } else if (isDateSerial(val)) {
+      weekColMap.set(c, excelSerialToISO(val));
+    }
+  }
+
+  const weekDatesSet = new Set<string>();
+  for (const d of weekColMap.values()) weekDatesSet.add(d);
+  const weekDates = Array.from(weekDatesSet).sort();
+
+  // ── Parse data rows ──────────────────────────────────────────
+  const assignments: ForecastAssignment[] = [];
 
   for (let r = 1; r < raw.length; r++) {
     const row = raw[r];
     if (!row || row.length === 0) continue;
 
     const name = cleanName(row[COL_NAME]);
-    if (!name) continue; // skip blank rows
+    if (!name) continue;
 
-    const projectName = typeof row[COL_PROJECT] === 'string' ? row[COL_PROJECT].trim() : '';
-    const roleText = typeof row[COL_ROLE] === 'string' ? row[COL_ROLE].trim() : '';
-    const rateUSD = toNumber(row[COL_RATE]);
+    const project = typeof row[COL_PROJECT] === 'string' ? row[COL_PROJECT].trim() : '';
+    if (!project) continue;
+
+    const role = typeof row[COL_ROLE] === 'string' ? row[COL_ROLE].trim() : '';
+    const rateRaw = toNumber(row[COL_RATE]);
+    const rateCard = rateRaw > 0 ? rateRaw : null;
+    const isSI = toBool(row[COL_SI]);
     const isContractor = toBool(row[COL_CONTRACTOR]);
-    const weeklyHours = toNumber(row[weekCol]);
     const notes = typeof row[COL_NOTES] === 'string' ? row[COL_NOTES].trim() : '';
 
-    rows.push({ employeeName: name, notes, roleText, rateUSD, isContractor, projectName, weeklyHours });
+    // Weekly hours
+    const weeklyHours: Record<string, number> = {};
+    for (const [colIdx, dateStr] of weekColMap) {
+      const hrs = toNumber(row[colIdx]);
+      if (hrs > 0) weeklyHours[dateStr] = hrs;
+    }
+
+    // Monthly totals from "X Full Month" columns
+    const monthlyTotals: Record<Month, number> = { Jan: 0, Feb: 0, Mar: 0, Apr: 0, May: 0, Jun: 0 };
+    for (const [colIdx, month] of monthTotalColMap) {
+      const val = toNumber(row[colIdx]);
+      if (val > 0) monthlyTotals[month] = val;
+    }
+
+    // Fill missing monthly totals from weekly hours
+    for (const month of MONTHS) {
+      if (monthlyTotals[month] === 0) {
+        let sum = 0;
+        for (const [dateStr, hrs] of Object.entries(weeklyHours)) {
+          if (dateToMonth(dateStr) === month) sum += hrs;
+        }
+        if (sum > 0) monthlyTotals[month] = sum;
+      }
+    }
+
+    assignments.push({
+      employeeName: name,
+      notes,
+      role,
+      rateCard,
+      isSI,
+      isContractor,
+      project,
+      weeklyHours,
+      monthlyTotals,
+    });
   }
 
-  return rows;
+  return { assignments, weekDates };
 }
 
-// ── Transform to app models ────────────────────────────────────
+// ── Derived data helpers ───────────────────────────────────────
 
-const HRS_PER_MONTH = 160;
-
-export function transformToModels(
-  rows: SpreadsheetRow[],
-  existingMembers: TeamMember[],
-  existingProjects: Project[],
-  exchangeRate: number = 83.5,
-): { members: TeamMember[]; projects: Project[] } {
-  const ts = new Date().toISOString();
-  const today = ts.split('T')[0];
-
-  // ── 1. Collect unique projects ───────────────────────────────
-  const projectNames = new Set<string>();
-  for (const row of rows) {
-    if (row.projectName) projectNames.add(row.projectName);
-  }
-
-  // Build project lookup: match by name (case-insensitive)
-  const existingProjectMap = new Map<string, Project>();
-  for (const p of existingProjects) {
-    existingProjectMap.set(p.name.toLowerCase(), p);
-  }
-
-  const projectIdMap = new Map<string, string>(); // projectName → id
-  const projects: Project[] = [];
-
-  for (const name of projectNames) {
-    const existing = existingProjectMap.get(name.toLowerCase());
-    if (existing) {
-      projects.push(existing);
-      projectIdMap.set(name, existing.id);
-    } else {
-      const id = nanoid();
-      projectIdMap.set(name, id);
-      projects.push({
-        id,
-        name,
-        clientName: name,
-        type: 'tm_ongoing' as ProjectType,
-        status: 'active' as ProjectStatus,
-        startDate: today,
-        endDate: null,
-        staffingRequirements: [],
-        notes: '',
-        contractValue: null,
-        monthlyBudget: null,
-        billingType: 'monthly',
-        createdAt: ts,
-        updatedAt: ts,
-      });
-    }
-  }
-
-  // Also keep any existing projects NOT in the spreadsheet
-  for (const p of existingProjects) {
-    if (!projectNames.has(p.name) && !projects.find((pp) => pp.id === p.id)) {
-      projects.push(p);
-    }
-  }
-
-  // ── 2. Group rows by employee name ───────────────────────────
-  const groups = new Map<string, SpreadsheetRow[]>();
-  for (const row of rows) {
-    const key = row.employeeName.toLowerCase();
+export function deriveEmployeeSummaries(assignments: ForecastAssignment[]): EmployeeSummary[] {
+  const groups = new Map<string, ForecastAssignment[]>();
+  for (const a of assignments) {
+    const key = a.employeeName.toLowerCase();
     const arr = groups.get(key) ?? [];
-    arr.push(row);
+    arr.push(a);
     groups.set(key, arr);
   }
 
-  // Build existing member lookup
-  const existingMemberMap = new Map<string, TeamMember>();
-  for (const m of existingMembers) {
-    existingMemberMap.set(m.name.toLowerCase().replace(/\*+$/, '').trim(), m);
-  }
+  const result: EmployeeSummary[] = [];
+  for (const [, rows] of groups) {
+    const first = rows[0];
+    const projects = [...new Set(rows.map((r) => r.project))];
 
-  const members: TeamMember[] = [];
-  const processedNames = new Set<string>();
-
-  for (const [key, empRows] of groups) {
-    processedNames.add(key);
-
-    // Aggregate hours across all projects
-    let totalHours = 0;
-    let bestProject = '';
-    let bestHours = -1;
-    let rateUSD = 0;
-    let roleText = '';
-    let isContractor = false;
-    let notes = '';
-
-    for (const row of empRows) {
-      totalHours += row.weeklyHours;
-      if (row.weeklyHours > bestHours) {
-        bestHours = row.weeklyHours;
-        bestProject = row.projectName;
+    const monthlyHours: Record<Month, number> = { Jan: 0, Feb: 0, Mar: 0, Apr: 0, May: 0, Jun: 0 };
+    for (const row of rows) {
+      for (const m of MONTHS) {
+        monthlyHours[m] += row.monthlyTotals[m];
       }
-      // Take rate/role from the first row that has them
-      if (row.rateUSD > 0 && rateUSD === 0) rateUSD = row.rateUSD;
-      if (row.roleText && !roleText) roleText = row.roleText;
+    }
+
+    let role = '';
+    let rateCard: number | null = null;
+    let isSI = false;
+    let isContractor = false;
+    for (const row of rows) {
+      if (row.role && !role) role = row.role;
+      if (row.rateCard && !rateCard) rateCard = row.rateCard;
+      if (row.isSI) isSI = true;
       if (row.isContractor) isContractor = true;
-      if (row.notes && !notes) notes = row.notes;
     }
 
-    const utilizationPercent = Math.min(100, Math.round((totalHours / 40) * 100));
-    const billingMonthly = rateUSD > 0 ? Math.round(rateUSD * HRS_PER_MONTH * exchangeRate) : null;
-    const status = totalHours === 0 ? 'bench' as const : 'deployed' as const;
-    const primaryProjectId = bestProject ? (projectIdMap.get(bestProject) ?? null) : null;
+    const totalHours = MONTHS.reduce((sum, m) => sum + monthlyHours[m], 0);
+    const q1Hours = monthlyHours.Jan + monthlyHours.Feb + monthlyHours.Mar;
+    const q2Hours = monthlyHours.Apr + monthlyHours.May + monthlyHours.Jun;
 
-    // Check if this employee already exists
-    const existing = existingMemberMap.get(key);
-    if (existing) {
-      // Preserve: id, role, seniority, specializations, email, notes (if set), ctcMonthly
-      // Update: billingRateMonthly, utilizationPercent, status, currentProjectId
-      members.push({
-        ...existing,
-        billingRateMonthly: billingMonthly ?? existing.billingRateMonthly,
-        utilizationPercent,
-        status,
-        currentProjectId: primaryProjectId,
-        availableFrom: status === 'bench' ? today : existing.availableFrom,
-        benchSince: status === 'bench' ? (existing.benchSince ?? today) : null,
-        notes: notes || existing.notes,
-        updatedAt: ts,
-      });
-    } else {
-      // New employee — infer role/seniority from spreadsheet
-      members.push({
-        id: nanoid(),
-        name: empRows[0].employeeName,
-        email: '',
-        role: roleText ? inferRole(roleText) : 'salesforce_developer',
-        seniority: roleText ? inferSeniority(roleText) : 'consultant',
-        specializations: [],
-        status,
-        currentProjectId: primaryProjectId,
-        availableFrom: status === 'bench' ? today : null,
-        benchSince: status === 'bench' ? today : null,
-        notes: isContractor ? `Contractor. ${notes}`.trim() : notes,
-        ctcMonthly: null,
-        billingRateMonthly: billingMonthly,
-        utilizationPercent,
-        createdAt: ts,
-        updatedAt: ts,
-      });
-    }
+    result.push({ name: first.employeeName, role, rateCard, isSI, isContractor, projects, monthlyHours, totalHours, q1Hours, q2Hours });
   }
 
-  // Keep existing members NOT in spreadsheet (don't delete them)
-  for (const m of existingMembers) {
-    const key = m.name.toLowerCase().replace(/\*+$/, '').trim();
-    if (!processedNames.has(key)) {
-      members.push(m);
-    }
+  return result.sort((a, b) => b.totalHours - a.totalHours);
+}
+
+export function deriveProjectSummaries(assignments: ForecastAssignment[]): ProjectSummary[] {
+  const groups = new Map<string, ForecastAssignment[]>();
+  for (const a of assignments) {
+    const arr = groups.get(a.project) ?? [];
+    arr.push(a);
+    groups.set(a.project, arr);
   }
 
-  return { members, projects };
+  const result: ProjectSummary[] = [];
+  for (const [projectName, rows] of groups) {
+    const monthlyHours: Record<Month, number> = { Jan: 0, Feb: 0, Mar: 0, Apr: 0, May: 0, Jun: 0 };
+    const employeeMap = new Map<string, { name: string; role: string; totalHours: number; rateCard: number | null }>();
+
+    for (const row of rows) {
+      const rowTotal = MONTHS.reduce((s, m) => s + row.monthlyTotals[m], 0);
+      for (const m of MONTHS) monthlyHours[m] += row.monthlyTotals[m];
+
+      const existing = employeeMap.get(row.employeeName);
+      if (existing) {
+        existing.totalHours += rowTotal;
+      } else {
+        employeeMap.set(row.employeeName, { name: row.employeeName, role: row.role, totalHours: rowTotal, rateCard: row.rateCard });
+      }
+    }
+
+    const employees = Array.from(employeeMap.values()).sort((a, b) => b.totalHours - a.totalHours);
+    const totalHours = MONTHS.reduce((s, m) => s + monthlyHours[m], 0);
+
+    let estimatedRevenue = 0;
+    for (const row of rows) {
+      if (row.rateCard) {
+        const hrs = MONTHS.reduce((s, m) => s + row.monthlyTotals[m], 0);
+        estimatedRevenue += hrs * row.rateCard;
+      }
+    }
+
+    result.push({ name: projectName, employees, monthlyHours, totalHours, estimatedRevenue });
+  }
+
+  return result.sort((a, b) => b.totalHours - a.totalHours);
 }

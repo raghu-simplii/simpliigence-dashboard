@@ -1,167 +1,140 @@
-import { useMemo, useEffect } from 'react';
-import { Users, FolderKanban, UserPlus, TrendingUp, Flame, IndianRupee, Wallet } from 'lucide-react';
-import { useTeamStore, useProjectStore, useCandidateStore, useFinancialStore } from '../store';
+import { useMemo } from 'react';
+import { Users, FolderKanban, Clock, DollarSign } from 'lucide-react';
+import { useForecastStore } from '../store';
 import { StatCard, Card } from '../components/ui';
 import { PageHeader } from '../components/shared/PageHeader';
-import { calculateUtilization } from '../lib/calculations/utilization';
-import { calculateSupplyDemandGaps } from '../lib/calculations/supplyDemand';
-import { calculateFinancialSnapshot, formatINR } from '../lib/calculations/financial';
-import { ROLE_LABELS, SENIORITY_LABELS, SPECIALIZATION_LABELS } from '../constants';
+import { deriveEmployeeSummaries, deriveProjectSummaries } from '../lib/parseSpreadsheet';
+import { MONTHS } from '../types/forecast';
+import { CHART_COLORS } from '../constants/brand';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts';
 
+const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#ec4899', '#14b8a6', '#a855f7'];
+
 export default function DashboardPage() {
-  const { members } = useTeamStore();
-  const { projects } = useProjectStore();
-  const { candidates } = useCandidateStore();
-  const { rateCards, hiringBudgets, initializeDefaultRateCards } = useFinancialStore();
+  const assignments = useForecastStore((s) => s.assignments);
 
-  useEffect(() => { initializeDefaultRateCards(); }, []);
+  const employees = useMemo(() => deriveEmployeeSummaries(assignments), [assignments]);
+  const projects = useMemo(() => deriveProjectSummaries(assignments), [assignments]);
 
-  const utilization = useMemo(
-    () => calculateUtilization(members, new Date().toISOString().slice(0, 7)),
-    [members]
+  const totalEmployees = employees.length;
+  const totalProjects = projects.length;
+  const totalHours = employees.reduce((s, e) => s + e.totalHours, 0);
+  const totalRevenue = projects.reduce((s, p) => s + p.estimatedRevenue, 0);
+
+  // Utilization: avg percentage based on 160 hrs/month capacity over 6 months (960 max)
+  const avgUtilization = totalEmployees > 0
+    ? Math.round(employees.reduce((s, e) => s + (e.totalHours / 960) * 100, 0) / totalEmployees)
+    : 0;
+
+  // Monthly hours trend
+  const monthlyTrend = useMemo(() =>
+    MONTHS.map((m) => ({
+      month: m,
+      hours: employees.reduce((s, e) => s + e.monthlyHours[m], 0),
+    })),
+    [employees],
   );
 
-  const gaps = useMemo(
-    () => calculateSupplyDemandGaps(members, projects),
-    [members, projects]
+  // Project allocation pie
+  const projectPie = useMemo(() =>
+    projects.map((p) => ({ name: p.name, value: p.totalHours })),
+    [projects],
   );
 
-  const financials = useMemo(
-    () => calculateFinancialSnapshot(members, projects, candidates, rateCards, hiringBudgets),
-    [members, projects, candidates, rateCards, hiringBudgets]
+  // Top employees by hours
+  const topEmployees = useMemo(() =>
+    employees.slice(0, 10).map((e) => ({
+      name: e.name.split(' ')[0],
+      q1: e.q1Hours,
+      q2: e.q2Hours,
+    })),
+    [employees],
   );
 
-  const activeCandidates = candidates.filter(
-    (c) => !['rejected', 'withdrawn', 'joined'].includes(c.currentStage)
-  );
-
-  const activeProjects = projects.filter((p) => ['active', 'confirmed'].includes(p.status));
-  const totalUnfilled = projects.reduce(
-    (sum, p) => sum + p.staffingRequirements.reduce((s, r) => s + (r.count - r.filledCount), 0), 0
-  );
-
-  const pieData = [
-    { name: 'Deployed', value: utilization.deployedCount },
-    { name: 'Bench', value: utilization.benchCount },
-  ];
-
-  const gapChartData = gaps.filter((g) => g.gap !== 0).slice(0, 8).map((g) => ({
-    name: `${SPECIALIZATION_LABELS[g.specialization]}`,
-    Supply: g.supply,
-    Demand: g.demand,
-  }));
-
-  const benchMembers = members.filter((m) => m.status === 'bench');
-  const rollingOff = members.filter((m) => m.status === 'rolling_off');
+  // Role distribution
+  const roleDistribution = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const e of employees) {
+      const role = e.role || 'Unspecified';
+      map.set(role, (map.get(role) || 0) + 1);
+    }
+    return Array.from(map.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [employees]);
 
   return (
-    <div>
-      <PageHeader title="Command Center" subtitle="Your team at a glance. No fluff." />
+    <>
+      <PageHeader title="Command Center" subtitle="Resource forecasting overview — Jan to Jun 2026" />
 
-      {/* KPI Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <StatCard label="Team Size" value={members.length} icon={<Users size={20} />} />
-        <StatCard
-          label="Utilization"
-          value={`${utilization.utilizationPercent}%`}
-          subtitle={`${utilization.deployedCount} deployed, ${utilization.benchCount} bench`}
-          icon={<TrendingUp size={20} />}
-        />
-        <StatCard label="Active Projects" value={activeProjects.length} subtitle={`${totalUnfilled} unfilled roles`} icon={<FolderKanban size={20} />} />
-        <StatCard label="In Pipeline" value={activeCandidates.length} subtitle="active candidates" icon={<UserPlus size={20} />} />
+      <div className="grid grid-cols-4 gap-4 mb-6">
+        <StatCard icon={Users} label="Team Size" value={totalEmployees} />
+        <StatCard icon={FolderKanban} label="Active Projects" value={totalProjects} />
+        <StatCard icon={Clock} label="Total Forecasted Hours" value={totalHours.toLocaleString()} />
+        <StatCard icon={DollarSign} label="Est. Revenue (USD)" value={`$${Math.round(totalRevenue).toLocaleString()}`} />
       </div>
 
-      {/* Financial KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <StatCard label="Bench Burn" value={`₹${formatINR(financials.benchCostMonthly)}`} subtitle={`${financials.benchMemberCount} on bench`} icon={<Flame size={20} />} />
-        <StatCard label="Revenue/Head" value={`₹${formatINR(financials.revenuePerHead)}`} subtitle="monthly" icon={<IndianRupee size={20} />} />
-        <StatCard label="Margin" value={`${financials.overallMarginPercent}%`} subtitle={`₹${formatINR(financials.totalMonthlyRevenue)} revenue`} icon={<TrendingUp size={20} />} />
-        <StatCard label="Hiring Budget" value={`₹${formatINR(financials.hiringBudgetRemaining)}`} subtitle={`of ₹${formatINR(financials.hiringBudgetAllocated)}`} icon={<Wallet size={20} />} />
-      </div>
-
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <Card title="Supply vs Demand">
-          {gapChartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={gapChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip />
-                <Bar dataKey="Supply" fill="#10b981" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Demand" fill="#ef4444" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="flex items-center justify-center h-[300px] text-slate-400 text-sm">
-              Add team members and projects to see supply vs demand.
-            </div>
-          )}
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <Card title="Monthly Hours Trend">
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={monthlyTrend}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} />
+              <Tooltip />
+              <Bar dataKey="hours" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Hours" />
+            </BarChart>
+          </ResponsiveContainer>
         </Card>
 
-        <Card title="Team Utilization">
-          {members.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={5} dataKey="value">
-                  <Cell fill="#3b82f6" />
-                  <Cell fill="#f59e0b" />
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="flex items-center justify-center h-[300px] text-slate-400 text-sm">
-              Add team members to see utilization.
-            </div>
-          )}
+        <Card title="Hours by Project">
+          <ResponsiveContainer width="100%" height={280}>
+            <PieChart>
+              <Pie data={projectPie} cx="50%" cy="50%" outerRadius={100} innerRadius={50} paddingAngle={2} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                {projectPie.map((_, i) => (
+                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip formatter={(v: number) => `${v.toLocaleString()} hrs`} />
+            </PieChart>
+          </ResponsiveContainer>
         </Card>
       </div>
 
-      {/* Bench & Roll-off */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card title={`On Bench (${benchMembers.length})`}>
-          {benchMembers.length > 0 ? (
-            <div className="space-y-2">
-              {benchMembers.map((m) => (
-                <div key={m.id} className="flex items-center justify-between py-2 border-b border-slate-50">
-                  <div>
-                    <p className="text-sm font-medium text-slate-800">{m.name}</p>
-                    <p className="text-xs text-slate-500">{ROLE_LABELS[m.role]} - {SENIORITY_LABELS[m.seniority]}</p>
-                  </div>
-                  <span className="text-xs text-slate-400">Since {m.benchSince || 'N/A'}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-slate-400 text-center py-8">No one on bench. Full deployment.</p>
-          )}
+      <div className="grid grid-cols-2 gap-4">
+        <Card title="Top 10 Employees — Q1 vs Q2 Hours">
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={topEmployees} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis type="number" tick={{ fontSize: 11 }} />
+              <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 11 }} />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="q1" fill="#3b82f6" name="Jan–Mar" radius={[0, 4, 4, 0]} />
+              <Bar dataKey="q2" fill="#10b981" name="Apr–Jun" radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
         </Card>
 
-        <Card title={`Rolling Off (${rollingOff.length})`}>
-          {rollingOff.length > 0 ? (
-            <div className="space-y-2">
-              {rollingOff.map((m) => (
-                <div key={m.id} className="flex items-center justify-between py-2 border-b border-slate-50">
-                  <div>
-                    <p className="text-sm font-medium text-slate-800">{m.name}</p>
-                    <p className="text-xs text-slate-500">{ROLE_LABELS[m.role]}</p>
-                  </div>
-                  <span className="text-xs text-amber-600 font-medium">{m.availableFrom || 'TBD'}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-slate-400 text-center py-8">No upcoming roll-offs.</p>
-          )}
+        <Card title="Team by Role">
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={roleDistribution} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis type="number" tick={{ fontSize: 11 }} />
+              <YAxis type="category" dataKey="name" width={160} tick={{ fontSize: 11 }} />
+              <Tooltip />
+              <Bar dataKey="value" name="Count" radius={[0, 4, 4, 0]}>
+                {roleDistribution.map((_, i) => (
+                  <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
         </Card>
       </div>
-    </div>
+    </>
   );
 }

@@ -1,19 +1,15 @@
 /**
- * Orchestrates the full OneDrive → Spreadsheet → Zustand sync pipeline.
+ * Orchestrates the full Dropbox/OneDrive → Spreadsheet → Forecast Store sync.
  */
 import { fetchExcelFromOneDrive } from './onedrive';
-import { parseForcastingSheet, transformToModels } from './parseSpreadsheet';
+import { parseForecastingSheet } from './parseSpreadsheet';
 import { useSyncStore } from '../store/useSyncStore';
-import { useTeamStore } from '../store/useTeamStore';
-import { useProjectStore } from '../store/useProjectStore';
-import { useFinancialStore } from '../store/useFinancialStore';
+import { useForecastStore } from '../store/useForecastStore';
 
 export interface SyncResult {
   success: boolean;
   message: string;
-  memberCount: number;
-  projectCount: number;
-  rowCount: number;
+  assignmentCount: number;
 }
 
 export async function performSync(): Promise<SyncResult> {
@@ -21,44 +17,30 @@ export async function performSync(): Promise<SyncResult> {
   const { oneDriveUrl, sheetName } = syncState;
 
   if (!oneDriveUrl) {
-    syncState.setSyncError('No OneDrive URL configured.');
-    return { success: false, message: 'No OneDrive URL configured.', memberCount: 0, projectCount: 0, rowCount: 0 };
+    syncState.setSyncError('No share URL configured.');
+    return { success: false, message: 'No share URL configured.', assignmentCount: 0 };
   }
 
   syncState.setSyncStarted();
 
   try {
-    // 1. Fetch the Excel file
     const buffer = await fetchExcelFromOneDrive(oneDriveUrl);
+    const { assignments, weekDates } = await parseForecastingSheet(buffer, sheetName || 'Forecasting Hrs');
 
-    // 2. Parse the sheet
-    const rows = await parseForcastingSheet(buffer, sheetName || 'Forecasting Hrs');
+    useForecastStore.getState().setData(assignments, weekDates);
 
-    // 3. Get current data from stores for matching
-    const existingMembers = useTeamStore.getState().members;
-    const existingProjects = useProjectStore.getState().projects;
-    const exchangeRate = useFinancialStore.getState().settings.exchangeRate;
-
-    // 4. Transform rows into models
-    const { members, projects } = transformToModels(rows, existingMembers, existingProjects, exchangeRate);
-
-    // 5. Write to stores (Zustand persist auto-saves to localStorage)
-    useTeamStore.getState().setMembers(members);
-    useProjectStore.getState().setProjects(projects);
-
-    // 6. Update sync status
-    syncState.setSyncSuccess(rows.length, members.length, projects.length);
+    const employees = new Set(assignments.map((a) => a.employeeName));
+    const projects = new Set(assignments.map((a) => a.project));
+    syncState.setSyncSuccess(assignments.length, employees.size, projects.size);
 
     return {
       success: true,
-      message: `Synced ${rows.length} rows → ${members.length} members, ${projects.length} projects.`,
-      memberCount: members.length,
-      projectCount: projects.length,
-      rowCount: rows.length,
+      message: `Synced ${assignments.length} assignments (${employees.size} employees, ${projects.size} projects).`,
+      assignmentCount: assignments.length,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error during sync.';
     syncState.setSyncError(message);
-    return { success: false, message, memberCount: 0, projectCount: 0, rowCount: 0 };
+    return { success: false, message, assignmentCount: 0 };
   }
 }

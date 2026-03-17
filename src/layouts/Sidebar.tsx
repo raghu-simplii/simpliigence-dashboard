@@ -3,22 +3,18 @@ import {
   LayoutDashboard,
   Users,
   FolderKanban,
-  UserPlus,
-  Radar,
-  Activity,
+  CalendarDays,
+  DollarSign,
   Settings,
-  IndianRupee,
   Zap,
 } from 'lucide-react';
 
 const navItems = [
-  { to: '/', icon: LayoutDashboard, label: 'Command Center' },
-  { to: '/team', icon: Users, label: 'Roster' },
-  { to: '/projects', icon: FolderKanban, label: 'Pipeline' },
-  { to: '/hiring', icon: UserPlus, label: 'Draft Board' },
-  { to: '/tm-intelligence', icon: Radar, label: 'T&M Intel' },
-  { to: '/bench', icon: Activity, label: 'Bench & Util' },
-  { to: '/financials', icon: IndianRupee, label: 'Salary Cap' },
+  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/team', icon: Users, label: 'Team' },
+  { to: '/projects', icon: FolderKanban, label: 'Projects' },
+  { to: '/forecasting', icon: CalendarDays, label: 'Forecasting' },
+  { to: '/financials', icon: DollarSign, label: 'Financials' },
 ];
 
 export function Sidebar() {
