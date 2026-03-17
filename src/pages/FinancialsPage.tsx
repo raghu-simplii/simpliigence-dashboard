@@ -74,7 +74,7 @@ export default function FinancialsPage() {
 
   return (
     <>
-      <PageHeader title="Financials" subtitle="Revenue estimates based on rate cards and forecasted hours" icon={DollarSign} />
+      <PageHeader title="Financials" subtitle="Revenue estimates based on rate cards and forecasted hours" />
 
       <div className="grid grid-cols-4 gap-4 mb-6">
         <StatCard icon={DollarSign} label="Total Revenue (USD)" value={`$${totalRevenue.toLocaleString()}`} />
@@ -90,7 +90,7 @@ export default function FinancialsPage() {
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis dataKey="month" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v: number) => `$${v.toLocaleString()}`} />
+              <Tooltip formatter={(v) => `$${Number(v).toLocaleString()}`} />
               <Bar dataKey="revenue" fill="#10b981" radius={[4, 4, 0, 0]} name="Revenue (USD)" />
             </BarChart>
           </ResponsiveContainer>
@@ -102,7 +102,7 @@ export default function FinancialsPage() {
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
               <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 11 }} />
-              <Tooltip formatter={(v: number) => `$${v.toLocaleString()}`} />
+              <Tooltip formatter={(v) => `$${Number(v).toLocaleString()}`} />
               <Bar dataKey="revenue" name="Revenue" radius={[0, 4, 4, 0]}>
                 {projectRevenue.map((_, i) => (
                   <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />

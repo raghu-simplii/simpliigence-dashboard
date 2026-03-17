@@ -1,5 +1,4 @@
 import { useState, useMemo } from 'react';
-import { CalendarDays } from 'lucide-react';
 import { useForecastStore } from '../store';
 import { PageHeader } from '../components/shared/PageHeader';
 import { Card } from '../components/ui';
@@ -69,7 +68,7 @@ export default function ForecastingPage() {
 
   return (
     <>
-      <PageHeader title="Forecasting" subtitle="Monthly hours by employee and project" icon={CalendarDays} />
+      <PageHeader title="Forecasting" subtitle="Monthly hours by employee and project" />
 
       {/* Utilization summary */}
       <Card title="Monthly Capacity Utilization" className="mb-6">

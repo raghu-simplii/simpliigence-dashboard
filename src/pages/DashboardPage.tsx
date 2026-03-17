@@ -98,7 +98,7 @@ export default function DashboardPage() {
                   <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                 ))}
               </Pie>
-              <Tooltip formatter={(v: number) => `${v.toLocaleString()} hrs`} />
+              <Tooltip formatter={(v) => `${Number(v).toLocaleString()} hrs`} />
             </PieChart>
           </ResponsiveContainer>
         </Card>

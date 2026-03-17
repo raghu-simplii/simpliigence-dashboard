@@ -1,5 +1,4 @@
 import { useState, useMemo } from 'react';
-import { Users } from 'lucide-react';
 import { useForecastStore } from '../store';
 import { PageHeader } from '../components/shared/PageHeader';
 import { Card, Badge } from '../components/ui';
@@ -35,7 +34,7 @@ export default function TeamRosterPage() {
 
   return (
     <>
-      <PageHeader title="Team Roster" subtitle={`${employees.length} team members across ${allProjects.length} projects`} icon={Users} />
+      <PageHeader title="Team Roster" subtitle={`${employees.length} team members across ${allProjects.length} projects`} />
 
       <Card>
         <div className="flex gap-3 mb-4">

@@ -1,5 +1,4 @@
 import { useState, useMemo } from 'react';
-import { FolderKanban } from 'lucide-react';
 import { useForecastStore } from '../store';
 import { PageHeader } from '../components/shared/PageHeader';
 import { Card } from '../components/ui';
@@ -27,7 +26,7 @@ export default function ProjectPipelinePage() {
 
   return (
     <>
-      <PageHeader title="Projects" subtitle={`${projects.length} active projects`} icon={FolderKanban} />
+      <PageHeader title="Projects" subtitle={`${projects.length} active projects`} />
 
       <Card title="Monthly Hours by Project" className="mb-6">
         <ResponsiveContainer width="100%" height={320}>
