@@ -6,6 +6,7 @@ import ProjectPipelinePage from '../pages/ProjectPipelinePage';
 import ForecastingPage from '../pages/ForecastingPage';
 import FinancialsPage from '../pages/FinancialsPage';
 import SettingsPage from '../pages/SettingsPage';
+import HiringForecastPage from '../pages/HiringForecastPage';
 
 export const router = createBrowserRouter(
   [
@@ -17,6 +18,7 @@ export const router = createBrowserRouter(
         { path: 'team', element: <TeamRosterPage /> },
         { path: 'projects', element: <ProjectPipelinePage /> },
         { path: 'forecasting', element: <ForecastingPage /> },
+        { path: 'hiring-forecast', element: <HiringForecastPage /> },
         { path: 'financials', element: <FinancialsPage /> },
         { path: 'settings', element: <SettingsPage /> },
       ],

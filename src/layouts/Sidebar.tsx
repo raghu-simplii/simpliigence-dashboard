@@ -5,6 +5,7 @@ import {
   FolderKanban,
   CalendarDays,
   DollarSign,
+  UserPlus,
   Settings,
   Zap,
 } from 'lucide-react';
@@ -14,6 +15,7 @@ const navItems = [
   { to: '/team', icon: Users, label: 'Team' },
   { to: '/projects', icon: FolderKanban, label: 'Projects' },
   { to: '/forecasting', icon: CalendarDays, label: 'Forecasting' },
+  { to: '/hiring-forecast', icon: UserPlus, label: 'Hiring Forecast' },
   { to: '/financials', icon: DollarSign, label: 'Financials' },
 ];
 
