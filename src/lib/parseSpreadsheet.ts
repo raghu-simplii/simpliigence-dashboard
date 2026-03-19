@@ -5,9 +5,10 @@
  *         F=Contractor, G=Active Projects, H+= weekly date columns
  *         interspersed with monthly total columns like "Jan Full Month".
  */
+import { emptyMonthRecord } from '../types/forecast';
 import type { ForecastAssignment, Month, EmployeeSummary, ProjectSummary } from '../types/forecast';
 
-const MONTHS: Month[] = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
+const MONTHS: Month[] = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // Column indices
 const COL_NAME = 0;
@@ -48,11 +49,11 @@ function excelSerialToISO(serial: number): string {
   return jsDate.toISOString().split('T')[0];
 }
 
-/** Determine which month a date falls in (Jan–Jun). */
+/** Determine which month a date falls in (Jan–Dec). */
 function dateToMonth(isoDate: string): Month | null {
   const d = new Date(isoDate);
-  const month = d.getMonth(); // 0=Jan, 5=Jun
-  if (month >= 0 && month <= 5) return MONTHS[month];
+  const month = d.getMonth(); // 0=Jan, 11=Dec
+  if (month >= 0 && month <= 11) return MONTHS[month];
   return null;
 }
 
@@ -66,6 +67,12 @@ function parseMonthlyTotalLabel(val: unknown): Month | null {
   if (lower.includes('apr') || lower.includes('aprint')) return 'Apr';
   if (lower.includes('may')) return 'May';
   if (lower.includes('jun')) return 'Jun';
+  if (lower.includes('jul')) return 'Jul';
+  if (lower.includes('aug')) return 'Aug';
+  if (lower.includes('sep')) return 'Sep';
+  if (lower.includes('oct')) return 'Oct';
+  if (lower.includes('nov')) return 'Nov';
+  if (lower.includes('dec')) return 'Dec';
   return null;
 }
 
@@ -144,7 +151,7 @@ export async function parseForecastingSheet(
     }
 
     // Monthly totals from "X Full Month" columns
-    const monthlyTotals: Record<Month, number> = { Jan: 0, Feb: 0, Mar: 0, Apr: 0, May: 0, Jun: 0 };
+    const monthlyTotals: Record<Month, number> = emptyMonthRecord();
     for (const [colIdx, month] of monthTotalColMap) {
       const val = toNumber(row[colIdx]);
       if (val > 0) monthlyTotals[month] = val;
@@ -193,7 +200,7 @@ export function deriveEmployeeSummaries(assignments: ForecastAssignment[]): Empl
     const first = rows[0];
     const projects = [...new Set(rows.map((r) => r.project))];
 
-    const monthlyHours: Record<Month, number> = { Jan: 0, Feb: 0, Mar: 0, Apr: 0, May: 0, Jun: 0 };
+    const monthlyHours: Record<Month, number> = emptyMonthRecord();
     for (const row of rows) {
       for (const m of MONTHS) {
         monthlyHours[m] += row.monthlyTotals[m];
@@ -231,7 +238,7 @@ export function deriveProjectSummaries(assignments: ForecastAssignment[]): Proje
 
   const result: ProjectSummary[] = [];
   for (const [projectName, rows] of groups) {
-    const monthlyHours: Record<Month, number> = { Jan: 0, Feb: 0, Mar: 0, Apr: 0, May: 0, Jun: 0 };
+    const monthlyHours: Record<Month, number> = emptyMonthRecord();
     const employeeMap = new Map<string, { name: string; role: string; totalHours: number; rateCard: number | null }>();
 
     for (const row of rows) {

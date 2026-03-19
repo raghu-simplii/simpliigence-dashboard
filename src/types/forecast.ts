@@ -1,7 +1,12 @@
 /** Core types for the forecast-driven dashboard. */
 
-export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'] as const;
+export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
 export type Month = (typeof MONTHS)[number];
+
+/** Create a zero-initialized Record<Month, number>. */
+export function emptyMonthRecord(): Record<Month, number> {
+  return { Jan: 0, Feb: 0, Mar: 0, Apr: 0, May: 0, Jun: 0, Jul: 0, Aug: 0, Sep: 0, Oct: 0, Nov: 0, Dec: 0 };
+}
 
 /** One row from the "Forecasting Hrs" sheet: one employee on one project. */
 export interface ForecastAssignment {

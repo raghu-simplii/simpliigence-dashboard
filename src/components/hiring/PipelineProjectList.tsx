@@ -15,7 +15,7 @@ export function PipelineProjectList({ projects, onAdd, onRemove }: Props) {
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
   const [startMonth, setStartMonth] = useState<Month>('Apr');
-  const [endMonth, setEndMonth] = useState<Month>('Jun');
+  const [endMonth, setEndMonth] = useState<Month>('Dec');
   const [baCount, setBaCount] = useState(0);
   const [jdCount, setJdCount] = useState(0);
   const [sdCount, setSdCount] = useState(0);

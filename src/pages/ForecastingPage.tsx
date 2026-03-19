@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useForecastStore } from '../store';
 import { PageHeader } from '../components/shared/PageHeader';
 import { Card } from '../components/ui';
-import { MONTHS } from '../types/forecast';
+import { MONTHS, emptyMonthRecord } from '../types/forecast';
 import type { Month } from '../types/forecast';
 import { deriveEmployeeSummaries } from '../lib/parseSpreadsheet';
 
@@ -26,7 +26,7 @@ export default function ForecastingPage() {
       if (!grouped.has(key)) grouped.set(key, new Map());
       const empMap = grouped.get(key)!;
       if (!empMap.has(a.project)) {
-        empMap.set(a.project, { Jan: 0, Feb: 0, Mar: 0, Apr: 0, May: 0, Jun: 0 });
+        empMap.set(a.project, emptyMonthRecord());
       }
       const m = empMap.get(a.project)!;
       for (const month of MONTHS) m[month] += a.monthlyTotals[month];

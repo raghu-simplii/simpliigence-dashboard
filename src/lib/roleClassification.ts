@@ -1,5 +1,5 @@
+import { MONTHS, emptyMonthRecord } from '../types/forecast';
 import type { ForecastAssignment, Month } from '../types/forecast';
-import { MONTHS } from '../types/forecast';
 import type { RoleCategory } from '../types/hiringForecast';
 import { ROLE_CATEGORIES } from '../types/hiringForecast';
 
@@ -20,7 +20,7 @@ export function getProjectDemandByRole(
   for (const a of assignments) {
     const cat = classifyRole(a.role);
     for (const m of MONTHS) {
-      result[cat][m] += a.monthlyTotals[m];
+      result[cat][m] += a.monthlyTotals[m] || 0;
     }
   }
   return result;
@@ -79,8 +79,8 @@ export function getHistoricUtilization(
 
 function emptyRoleMonthRecord(): Record<RoleCategory, Record<Month, number>> {
   return {
-    BA: { Jan: 0, Feb: 0, Mar: 0, Apr: 0, May: 0, Jun: 0 },
-    JuniorDev: { Jan: 0, Feb: 0, Mar: 0, Apr: 0, May: 0, Jun: 0 },
-    SeniorDev: { Jan: 0, Feb: 0, Mar: 0, Apr: 0, May: 0, Jun: 0 },
+    BA: emptyMonthRecord(),
+    JuniorDev: emptyMonthRecord(),
+    SeniorDev: emptyMonthRecord(),
   };
 }

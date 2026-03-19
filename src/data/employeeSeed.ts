@@ -7,6 +7,7 @@ import type { ForecastAssignment, Month } from '../types/forecast';
 type MH = Record<Month, number>;
 const mh = (jan: number, feb: number, mar: number, apr: number, may: number, jun: number): MH => ({
   Jan: jan, Feb: feb, Mar: mar, Apr: apr, May: may, Jun: jun,
+  Jul: 0, Aug: 0, Sep: 0, Oct: 0, Nov: 0, Dec: 0,
 });
 
 interface SeedRow {

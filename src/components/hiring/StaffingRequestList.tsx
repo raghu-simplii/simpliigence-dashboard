@@ -16,7 +16,7 @@ export function StaffingRequestList({ requests, onAdd, onRemove }: Props) {
   const [role, setRole] = useState<RoleCategory>('JuniorDev');
   const [hours, setHours] = useState(160);
   const [startMonth, setStartMonth] = useState<Month>('Jan');
-  const [endMonth, setEndMonth] = useState<Month>('Jun');
+  const [endMonth, setEndMonth] = useState<Month>('Dec');
   const [client, setClient] = useState('');
 
   const handleSubmit = () => {

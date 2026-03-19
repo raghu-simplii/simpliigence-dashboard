@@ -1,25 +1,27 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { MONTHS } from '../types/forecast';
 import type { Month } from '../types/forecast';
 import type { ConciergeConfig, PipelineProject, RoleCategory, ScenarioSettings, StaffingRequest } from '../types/hiringForecast';
 
 function defaultConciergeConfig(): ConciergeConfig {
-  const m = (ba: number, jd: number, sd: number): Record<RoleCategory, number> => ({
-    BA: ba, JuniorDev: jd, SeniorDev: sd,
-  });
   // ~400 hrs/month total, split: BA 130, JuniorDev 170, SeniorDev 100
-  const split = m(130, 170, 100);
+  const fill = (val: number): Record<Month, number> => {
+    const r: Record<string, number> = {};
+    for (const m of MONTHS) r[m] = val;
+    return r as Record<Month, number>;
+  };
   return {
     monthlyHours: {
-      BA: { Jan: split.BA, Feb: split.BA, Mar: split.BA, Apr: split.BA, May: split.BA, Jun: split.BA },
-      JuniorDev: { Jan: split.JuniorDev, Feb: split.JuniorDev, Mar: split.JuniorDev, Apr: split.JuniorDev, May: split.JuniorDev, Jun: split.JuniorDev },
-      SeniorDev: { Jan: split.SeniorDev, Feb: split.SeniorDev, Mar: split.SeniorDev, Apr: split.SeniorDev, May: split.SeniorDev, Jun: split.SeniorDev },
+      BA: fill(130),
+      JuniorDev: fill(170),
+      SeniorDev: fill(100),
     },
   };
 }
 
 function defaultScenarioSettings(): ScenarioSettings {
-  return { targetUtilization: 80, forecastStartMonth: 'Mar', forecastEndMonth: 'Jun' };
+  return { targetUtilization: 80, forecastStartMonth: 'Mar', forecastEndMonth: 'Dec' };
 }
 
 let nextId = 1;
@@ -103,7 +105,7 @@ export const useHiringForecastStore = create<HiringForecastState>()(
     }),
     {
       name: 'simpliigence-hiring-forecast',
-      version: 3,
+      version: 4,
       migrate: () => ({
         conciergeConfig: defaultConciergeConfig(),
         staffingRequests: [],

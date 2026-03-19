@@ -35,7 +35,7 @@ export default function HiringForecastPage() {
 
   return (
     <>
-      <PageHeader title="Hiring Forecast" subtitle="Scenario planner for staffing needs — Jan to Jun 2026" />
+      <PageHeader title="Hiring Forecast" subtitle="Scenario planner for staffing needs — 2026" />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-4 gap-4 mb-6">
