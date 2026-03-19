@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FolderPlus, Trash2, Users } from 'lucide-react';
+import { FolderPlus, Trash2 } from 'lucide-react';
 import { MONTHS } from '../../types/forecast';
 import type { Month } from '../../types/forecast';
 import type { PipelineProject, RoleCategory } from '../../types/hiringForecast';
