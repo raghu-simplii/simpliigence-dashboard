@@ -17,6 +17,10 @@ export const useForecastStore = create<ForecastState>()(
       setData: (assignments, weekDates) => set({ assignments, weekDates }),
       clear: () => set({ assignments: [], weekDates: [] }),
     }),
-    { name: 'simpliigence-forecast', version: 1 },
+    {
+      name: 'simpliigence-forecast',
+      version: 2,
+      migrate: () => ({ assignments: [], weekDates: [] }),
+    },
   ),
 );

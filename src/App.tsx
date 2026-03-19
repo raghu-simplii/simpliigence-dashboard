@@ -16,7 +16,7 @@ function useSeedOnFirstVisit() {
       const assignments = buildSeedAssignments();
       localStorage.setItem(
         'simpliigence-forecast',
-        JSON.stringify({ state: { assignments, weekDates: [] }, version: 1 }),
+        JSON.stringify({ state: { assignments, weekDates: [] }, version: 2 }),
       );
       window.location.reload();
     } catch {
