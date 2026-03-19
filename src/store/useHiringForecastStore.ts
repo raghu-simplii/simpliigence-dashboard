@@ -19,7 +19,7 @@ function defaultConciergeConfig(): ConciergeConfig {
 }
 
 function defaultScenarioSettings(): ScenarioSettings {
-  return { targetUtilization: 80, forecastStartMonth: 'Jan', forecastEndMonth: 'Jun' };
+  return { targetUtilization: 80, forecastStartMonth: 'Mar', forecastEndMonth: 'Jun' };
 }
 
 let nextId = 1;
@@ -103,7 +103,7 @@ export const useHiringForecastStore = create<HiringForecastState>()(
     }),
     {
       name: 'simpliigence-hiring-forecast',
-      version: 2,
+      version: 3,
       migrate: () => ({
         conciergeConfig: defaultConciergeConfig(),
         staffingRequests: [],
