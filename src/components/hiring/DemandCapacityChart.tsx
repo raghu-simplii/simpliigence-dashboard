@@ -4,8 +4,6 @@ import {
   ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import type { HiringGapRow } from '../../types/hiringForecast';
-import type { Month } from '../../types/forecast';
-import { MONTHS } from '../../types/forecast';
 
 type ViewMode = 'all' | 'BA' | 'Dev';
 
@@ -64,7 +62,7 @@ export function DemandCapacityChart({ rows }: Props) {
           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
           <XAxis dataKey="month" tick={{ fontSize: 12 }} />
           <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `${(v / 1000).toFixed(1)}k`} />
-          <Tooltip formatter={(v: number) => `${v.toLocaleString()} hrs`} />
+          <Tooltip formatter={(v) => `${Number(v).toLocaleString()} hrs`} />
           <Legend />
           <Bar dataKey="Project Demand" stackId="demand" fill="#3b82f6" radius={[0, 0, 0, 0]} />
           <Bar dataKey="Concierge Demand" stackId="demand" fill="#f59e0b" radius={[0, 0, 0, 0]} />
