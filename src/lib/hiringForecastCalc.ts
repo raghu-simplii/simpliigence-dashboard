@@ -3,6 +3,7 @@ import type { Month } from '../types/forecast';
 import type {
   ConciergeConfig,
   HiringGapRow,
+  PipelineProject,
   RoleCategory,
   ScenarioSettings,
   StaffingRequest,
@@ -34,6 +35,21 @@ function sumStaffingDemand(
   return total;
 }
 
+/** Sum pipeline project demand for a given role category and month. */
+function sumPipelineDemand(
+  projects: PipelineProject[],
+  cat: RoleCategory,
+  month: Month,
+): number {
+  let total = 0;
+  for (const p of projects) {
+    if (p.headcount[cat] > 0 && monthInRange(month, p.startMonth, p.endMonth)) {
+      total += p.headcount[cat] * p.hoursPerPerson;
+    }
+  }
+  return total;
+}
+
 /**
  * Compute the full hiring gap analysis.
  * Returns one HiringGapRow per (month, roleCategory) within the forecast period.
@@ -42,6 +58,7 @@ export function computeHiringForecast(
   assignments: ForecastAssignment[],
   conciergeConfig: ConciergeConfig,
   staffingRequests: StaffingRequest[],
+  pipelineProjects: PipelineProject[],
   settings: ScenarioSettings,
 ): HiringGapRow[] {
   const projectDemand = getProjectDemandByRole(assignments);
@@ -57,7 +74,8 @@ export function computeHiringForecast(
       const pd = projectDemand[cat][month];
       const cd = conciergeConfig.monthlyHours[cat][month];
       const sd = sumStaffingDemand(staffingRequests, cat, month);
-      const totalDemand = pd + cd + sd;
+      const ppd = sumPipelineDemand(pipelineProjects, cat, month);
+      const totalDemand = pd + cd + sd + ppd;
       const totalCapacity = headcount[cat] * effectiveCapPerPerson;
       const gap = totalDemand - totalCapacity;
 
@@ -67,6 +85,7 @@ export function computeHiringForecast(
         projectDemand: pd,
         conciergeDemand: cd,
         staffingDemand: sd,
+        pipelineDemand: ppd,
         totalDemand,
         currentHeadcount: headcount[cat],
         effectiveCapacityPerPerson: effectiveCapPerPerson,

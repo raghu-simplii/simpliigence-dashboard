@@ -27,12 +27,14 @@ export function DemandCapacityChart({ rows }: Props) {
       const projectDemand = filtered.reduce((s, r) => s + r.projectDemand, 0);
       const conciergeDemand = filtered.reduce((s, r) => s + r.conciergeDemand, 0);
       const staffingDemand = filtered.reduce((s, r) => s + r.staffingDemand, 0);
+      const pipelineDemand = filtered.reduce((s, r) => s + r.pipelineDemand, 0);
       const capacity = filtered.reduce((s, r) => s + r.totalCapacity, 0);
 
       return {
         month: m,
         'Project Demand': Math.round(projectDemand),
         'Concierge Demand': Math.round(conciergeDemand),
+        'Pipeline Projects': Math.round(pipelineDemand),
         'Staffing Demand': Math.round(staffingDemand),
         Capacity: Math.round(capacity),
       };
@@ -66,6 +68,7 @@ export function DemandCapacityChart({ rows }: Props) {
           <Legend />
           <Bar dataKey="Project Demand" stackId="demand" fill="#3b82f6" radius={[0, 0, 0, 0]} />
           <Bar dataKey="Concierge Demand" stackId="demand" fill="#f59e0b" radius={[0, 0, 0, 0]} />
+          <Bar dataKey="Pipeline Projects" stackId="demand" fill="#ef4444" radius={[0, 0, 0, 0]} />
           <Bar dataKey="Staffing Demand" stackId="demand" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
           <Line type="monotone" dataKey="Capacity" stroke="#10b981" strokeWidth={3} dot={{ r: 4 }} name="Capacity" />
           <ReferenceLine y={0} stroke="#94a3b8" />

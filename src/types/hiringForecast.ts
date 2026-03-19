@@ -25,6 +25,18 @@ export interface StaffingRequest {
   clientName: string;
 }
 
+/** A pipeline project with resource requirements */
+export interface PipelineProject {
+  id: string;
+  projectName: string;
+  startMonth: Month;
+  endMonth: Month;
+  /** Number of people needed per role category */
+  headcount: Record<RoleCategory, number>;
+  /** Hours per person per month (default 160) */
+  hoursPerPerson: number;
+}
+
 /** Scenario planner settings */
 export interface ScenarioSettings {
   targetUtilization: number; // 0–100
@@ -39,6 +51,7 @@ export interface HiringGapRow {
   projectDemand: number;
   conciergeDemand: number;
   staffingDemand: number;
+  pipelineDemand: number;
   totalDemand: number;
   currentHeadcount: number;
   effectiveCapacityPerPerson: number;

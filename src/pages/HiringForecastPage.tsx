@@ -10,22 +10,23 @@ import { computeHiringForecast, aggregateGapRows } from '../lib/hiringForecastCa
 import { DemandCapacityChart } from '../components/hiring/DemandCapacityChart';
 import { ConciergeConfigPanel } from '../components/hiring/ConciergeConfigPanel';
 import { StaffingRequestList } from '../components/hiring/StaffingRequestList';
+import { PipelineProjectList } from '../components/hiring/PipelineProjectList';
 
 export default function HiringForecastPage() {
   const assignments = useForecastStore((s) => s.assignments);
   const {
-    conciergeConfig, staffingRequests, scenarioSettings,
-    setConciergeHours, addStaffingRequest, removeStaffingRequest, updateScenarioSettings,
+    conciergeConfig, staffingRequests, pipelineProjects, scenarioSettings,
+    setConciergeHours, addStaffingRequest, removeStaffingRequest,
+    addPipelineProject, removePipelineProject, updateScenarioSettings,
   } = useHiringForecastStore();
 
   const gapRows = useMemo(
-    () => computeHiringForecast(assignments, conciergeConfig, staffingRequests, scenarioSettings),
-    [assignments, conciergeConfig, staffingRequests, scenarioSettings],
+    () => computeHiringForecast(assignments, conciergeConfig, staffingRequests, pipelineProjects, scenarioSettings),
+    [assignments, conciergeConfig, staffingRequests, pipelineProjects, scenarioSettings],
   );
 
   const summary = useMemo(() => aggregateGapRows(gapRows), [gapRows]);
 
-  // Months in the forecast period for the table
   const activeMonths = useMemo(() => {
     const s = MONTHS.indexOf(scenarioSettings.forecastStartMonth);
     const e = MONTHS.indexOf(scenarioSettings.forecastEndMonth);
@@ -85,23 +86,12 @@ export default function HiringForecastPage() {
             </div>
           </div>
           <div className="flex-1" />
-          <div className="flex gap-4 text-xs text-slate-500">
-            <span>
-              <span className="inline-block w-3 h-3 rounded bg-[#3b82f6] mr-1 align-middle" />
-              Project
-            </span>
-            <span>
-              <span className="inline-block w-3 h-3 rounded bg-[#f59e0b] mr-1 align-middle" />
-              Concierge
-            </span>
-            <span>
-              <span className="inline-block w-3 h-3 rounded bg-[#8b5cf6] mr-1 align-middle" />
-              Staffing
-            </span>
-            <span>
-              <span className="inline-block w-3 h-3 rounded bg-[#10b981] mr-1 align-middle" />
-              Capacity
-            </span>
+          <div className="flex gap-3 text-xs text-slate-500">
+            <span><span className="inline-block w-3 h-3 rounded bg-[#3b82f6] mr-1 align-middle" />Project</span>
+            <span><span className="inline-block w-3 h-3 rounded bg-[#f59e0b] mr-1 align-middle" />Concierge</span>
+            <span><span className="inline-block w-3 h-3 rounded bg-[#ef4444] mr-1 align-middle" />Pipeline</span>
+            <span><span className="inline-block w-3 h-3 rounded bg-[#8b5cf6] mr-1 align-middle" />Staffing</span>
+            <span><span className="inline-block w-3 h-3 rounded bg-[#10b981] mr-1 align-middle" />Capacity</span>
           </div>
         </div>
       </Card>
@@ -109,6 +99,16 @@ export default function HiringForecastPage() {
       {/* Demand vs Capacity Chart */}
       <Card title="Demand vs Capacity" className="mb-6">
         <DemandCapacityChart rows={gapRows} />
+      </Card>
+
+      {/* Pipeline Projects — full width */}
+      <Card title="Pipeline Projects" className="mb-6">
+        <p className="text-xs text-slate-400 mb-3">Add upcoming projects with start date, end date, and resource needs. Forecast updates automatically.</p>
+        <PipelineProjectList
+          projects={pipelineProjects}
+          onAdd={addPipelineProject}
+          onRemove={removePipelineProject}
+        />
       </Card>
 
       {/* Two-column: Concierge + Staffing */}
@@ -133,7 +133,7 @@ export default function HiringForecastPage() {
               <tr className="border-b border-slate-200 text-left">
                 <th className="pb-3 pr-4 font-semibold text-slate-600">Role</th>
                 {activeMonths.map((m) => (
-                  <th key={m} className="pb-3 text-center font-semibold text-slate-600" colSpan={1}>{m}</th>
+                  <th key={m} className="pb-3 text-center font-semibold text-slate-600">{m}</th>
                 ))}
                 <th className="pb-3 text-right font-semibold text-slate-600">Peak Hires</th>
               </tr>
