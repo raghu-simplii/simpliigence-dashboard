@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   Users,
   FolderKanban,
+  Layers,
   CalendarDays,
   DollarSign,
   UserPlus,
@@ -13,7 +14,8 @@ import {
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/team', icon: Users, label: 'Team' },
-  { to: '/projects', icon: FolderKanban, label: 'Projects' },
+  { to: '/projects', icon: FolderKanban, label: 'Current Projects' },
+  { to: '/pipeline', icon: Layers, label: 'Pipeline' },
   { to: '/forecasting', icon: CalendarDays, label: 'Forecasting' },
   { to: '/hiring-forecast', icon: UserPlus, label: 'Hiring Forecast' },
   { to: '/financials', icon: DollarSign, label: 'Financials' },

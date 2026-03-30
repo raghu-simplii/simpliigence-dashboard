@@ -361,9 +361,12 @@ function ZohoProjectCard({ project, teamAllocation, loadedCost, onUpdateProject 
 /* ── Main page ──────────────────────────────── */
 export default function ProjectPipelinePage() {
   const assignments = useForecastStore((s) => s.assignments);
-  const zohoProjects = usePipelineStore((s) => s.projects);
+  const allProjects = usePipelineStore((s) => s.projects);
   const updateProject = usePipelineStore((s) => s.updateProject);
   const lastSync = usePipelineStore((s) => s.lastZohoSync);
+
+  // Current projects = Zoho-sourced only
+  const currentProjects = useMemo(() => allProjects.filter((p) => p.source === 'zoho'), [allProjects]);
 
   // Derive team allocation per project from forecast store
   const projectSummaries = useMemo(() => deriveProjectSummaries(assignments), [assignments]);
@@ -373,16 +376,15 @@ export default function ProjectPipelinePage() {
     return map;
   }, [projectSummaries]);
 
-  // Build a set of all forecast names that are claimed by a Zoho project
-  // (via forecastName alias or exact name match)
+  // Build a set of all forecast names that are claimed by a current project
   const claimedForecastNames = useMemo(() => {
     const set = new Set<string>();
-    for (const p of zohoProjects) {
+    for (const p of currentProjects) {
       if (p.forecastName) set.add(p.forecastName.toLowerCase());
       set.add(p.name.toLowerCase());
     }
     return set;
-  }, [zohoProjects]);
+  }, [currentProjects]);
 
   const forecastOnlyProjects = useMemo(
     () => projectSummaries.filter((ps) => !claimedForecastNames.has(ps.name.toLowerCase())),
@@ -390,14 +392,14 @@ export default function ProjectPipelinePage() {
   );
 
   // Stats
-  const activeZoho = zohoProjects.filter((p) => !['Completed', 'On Hold'].includes(p.status)).length;
-  const totalPhases = zohoProjects.reduce((sum, p) => sum + (p.phases?.length ?? 0), 0);
+  const activeProjects = currentProjects.filter((p) => !['Completed', 'On Hold'].includes(p.status)).length;
+  const totalPhases = currentProjects.reduce((sum, p) => sum + (p.phases?.length ?? 0), 0);
 
   return (
     <>
       <PageHeader
-        title="Projects"
-        subtitle={`${zohoProjects.length} Zoho projects · ${forecastOnlyProjects.length} forecast-only`}
+        title="Current Projects"
+        subtitle={`${currentProjects.length} active projects · ${forecastOnlyProjects.length} forecast-only`}
         action={
           lastSync && (
             <div className="flex items-center gap-2 text-xs text-slate-400">
@@ -411,11 +413,11 @@ export default function ProjectPipelinePage() {
       {/* Summary stats */}
       <div className="grid grid-cols-4 gap-4 mb-6">
         <div className="bg-white rounded-lg border border-slate-200 p-4">
-          <div className="text-2xl font-bold text-slate-800">{zohoProjects.length}</div>
-          <div className="text-xs text-slate-500">Zoho Projects</div>
+          <div className="text-2xl font-bold text-slate-800">{currentProjects.length}</div>
+          <div className="text-xs text-slate-500">Current Projects</div>
         </div>
         <div className="bg-white rounded-lg border border-slate-200 p-4">
-          <div className="text-2xl font-bold text-blue-600">{activeZoho}</div>
+          <div className="text-2xl font-bold text-blue-600">{activeProjects}</div>
           <div className="text-xs text-slate-500">Active / In Progress</div>
         </div>
         <div className="bg-white rounded-lg border border-slate-200 p-4">
@@ -428,10 +430,10 @@ export default function ProjectPipelinePage() {
         </div>
       </div>
 
-      {/* Zoho projects */}
-      <h2 className="text-lg font-semibold text-slate-800 mb-3">Zoho Projects</h2>
+      {/* Current projects (from Zoho) */}
+      <h2 className="text-lg font-semibold text-slate-800 mb-3">Projects <span className="text-sm font-normal text-slate-400">(from Zoho)</span></h2>
       <div className="grid grid-cols-1 gap-3 mb-8">
-        {zohoProjects.map((project) => {
+        {currentProjects.map((project) => {
           const ps = teamByProject.get((project.forecastName ?? project.name).toLowerCase()) ?? teamByProject.get(project.name.toLowerCase());
           return (
             <ZohoProjectCard

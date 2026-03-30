@@ -3,6 +3,7 @@ import AppLayout from '../layouts/AppLayout';
 import DashboardPage from '../pages/DashboardPage';
 import TeamRosterPage from '../pages/TeamRosterPage';
 import ProjectPipelinePage from '../pages/ProjectPipelinePage';
+import PipelinePage from '../pages/PipelinePage';
 import ForecastingPage from '../pages/ForecastingPage';
 import FinancialsPage from '../pages/FinancialsPage';
 import SettingsPage from '../pages/SettingsPage';
@@ -17,6 +18,7 @@ export const router = createBrowserRouter(
         { index: true, element: <DashboardPage /> },
         { path: 'team', element: <TeamRosterPage /> },
         { path: 'projects', element: <ProjectPipelinePage /> },
+        { path: 'pipeline', element: <PipelinePage /> },
         { path: 'forecasting', element: <ForecastingPage /> },
         { path: 'hiring-forecast', element: <HiringForecastPage /> },
         { path: 'financials', element: <FinancialsPage /> },
