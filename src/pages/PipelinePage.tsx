@@ -101,6 +101,7 @@ function NewProjectForm({ onAdd, onCancel }: { onAdd: (p: ZohoPipelineProject) =
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [revenue, setRevenue] = useState('');
+  const [revCurrency, setRevCurrency] = useState<'USD' | 'CAD'>('USD');
   const [baCount, setBaCount] = useState(0);
   const [jdCount, setJdCount] = useState(0);
   const [sdCount, setSdCount] = useState(0);
@@ -119,6 +120,7 @@ function NewProjectForm({ onAdd, onCancel }: { onAdd: (p: ZohoPipelineProject) =
       endDate: endDate || null,
       source: 'manual',
       revenue: parseFloat(revenue) > 0 ? parseFloat(revenue) : null,
+      revenueCurrency: revCurrency,
       resources: buildResources(baCount, jdCount, sdCount),
     };
     onAdd(project);
@@ -188,15 +190,25 @@ function NewProjectForm({ onAdd, onCancel }: { onAdd: (p: ZohoPipelineProject) =
             />
           </div>
           <div>
-            <label className="text-xs text-slate-500 block mb-1">Est. Revenue (USD)</label>
-            <input
-              type="number"
-              value={revenue}
-              onChange={(e) => setRevenue(e.target.value)}
-              className="w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-              placeholder="0"
-              min="0"
-            />
+            <label className="text-xs text-slate-500 block mb-1">Est. Revenue</label>
+            <div className="flex gap-1">
+              <select
+                value={revCurrency}
+                onChange={(e) => setRevCurrency(e.target.value as 'USD' | 'CAD')}
+                className="rounded border border-slate-300 bg-white px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              >
+                <option value="USD">USD</option>
+                <option value="CAD">CAD</option>
+              </select>
+              <input
+                type="number"
+                value={revenue}
+                onChange={(e) => setRevenue(e.target.value)}
+                className="flex-1 rounded border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                placeholder="0"
+                min="0"
+              />
+            </div>
           </div>
         </div>
 
@@ -261,6 +273,8 @@ function PipelineProjectCard({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmMove, setConfirmMove] = useState(false);
   const revenue = project.revenue ?? 0;
+  const curr = project.revenueCurrency ?? 'USD';
+  const currSymbol = curr === 'CAD' ? 'CA$' : '$';
 
   return (
     <Card>
@@ -280,7 +294,7 @@ function PipelineProjectCard({
             )}
             {revenue > 0 && (
               <span className="flex items-center gap-1 text-emerald-700">
-                <DollarSign size={12} /> Est. Revenue: ${revenue.toLocaleString()}
+                <DollarSign size={12} /> Est. Revenue: {currSymbol}{revenue.toLocaleString()} {curr}
               </span>
             )}
             {totalPeople(project.resources) > 0 && (
@@ -380,15 +394,25 @@ function PipelineProjectCard({
               </select>
             </div>
             <div>
-              <label className="text-xs text-slate-500 block mb-1">Est. Revenue (USD)</label>
-              <InlineEdit
-                value={project.revenue ?? ''}
-                type="number"
-                prefix="$"
-                placeholder="Set revenue"
-                onSave={(v) => onUpdate(project.id, { revenue: parseFloat(v) > 0 ? parseFloat(v) : null })}
-                className="w-32"
-              />
+              <label className="text-xs text-slate-500 block mb-1">Est. Revenue</label>
+              <div className="flex items-center gap-1">
+                <select
+                  value={curr}
+                  onChange={(e) => onUpdate(project.id, { revenueCurrency: e.target.value as 'USD' | 'CAD' })}
+                  className="rounded border border-slate-200 bg-white px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary/50"
+                >
+                  <option value="USD">USD</option>
+                  <option value="CAD">CAD</option>
+                </select>
+                <InlineEdit
+                  value={project.revenue ?? ''}
+                  type="number"
+                  prefix={currSymbol}
+                  placeholder="Set revenue"
+                  onSave={(v) => onUpdate(project.id, { revenue: parseFloat(v) > 0 ? parseFloat(v) : null })}
+                  className="w-32"
+                />
+              </div>
             </div>
             <div>
               <label className="text-xs text-slate-500 block mb-1">Expected Start</label>

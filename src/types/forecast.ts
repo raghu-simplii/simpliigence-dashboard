@@ -87,6 +87,8 @@ export interface ZohoPipelineProject {
   goLiveDate?: string | null;
   /** Project revenue (manually entered). */
   revenue?: number | null;
+  /** Revenue currency — defaults to USD. */
+  revenueCurrency?: 'USD' | 'CAD';
   /** Estimated resource needs (for forecast) */
   resources: PipelineResource[];
   /** Phases/milestones from Zoho */

@@ -174,6 +174,8 @@ function ZohoProjectCard({ project, teamAllocation, loadedCost, onUpdateProject 
   const currentPhase = phases.find((p) => !p.isClosed);
   const goLiveDate = getGoLiveDate(project);
   const revenue = project.revenue ?? 0;
+  const curr = project.revenueCurrency ?? 'USD';
+  const currSymbol = curr === 'CAD' ? 'CA$' : '$';
   const margin = revenue - loadedCost;
   const marginPct = revenue > 0 ? Math.round((margin / revenue) * 100) : 0;
 
@@ -216,12 +218,12 @@ function ZohoProjectCard({ project, teamAllocation, loadedCost, onUpdateProject 
           {(revenue > 0 || loadedCost > 0) && (
             <div className="flex items-center gap-4 mt-2 ml-6 text-xs">
               {revenue > 0 && (
-                <span className="flex items-center gap-1 text-emerald-700"><DollarSign size={12} /> Revenue: ${revenue.toLocaleString()}</span>
+                <span className="flex items-center gap-1 text-emerald-700"><DollarSign size={12} /> Revenue: {currSymbol}{revenue.toLocaleString()} {curr}</span>
               )}
               {loadedCost > 0 && (
-                <span className="flex items-center gap-1 text-slate-600"><TrendingUp size={12} /> Cost: ${Math.round(loadedCost).toLocaleString()}</span>
+                <span className="flex items-center gap-1 text-slate-600"><TrendingUp size={12} /> Cost: ${Math.round(loadedCost).toLocaleString()} USD</span>
               )}
-              {revenue > 0 && loadedCost > 0 && (
+              {revenue > 0 && loadedCost > 0 && curr === 'USD' && (
                 <span className={`font-semibold ${margin >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                   Margin: ${Math.round(margin).toLocaleString()} ({marginPct}%)
                 </span>
@@ -323,28 +325,45 @@ function ZohoProjectCard({ project, teamAllocation, loadedCost, onUpdateProject 
               )}
             </div>
             <div>
-              <label className="text-xs text-slate-500 block mb-1">Project Revenue (USD)</label>
-              <InlineEdit
-                value={project.revenue ?? ''}
-                type="number"
-                prefix="$"
-                placeholder="Set revenue"
-                onSave={(v) => onUpdateProject(project.id, { revenue: parseFloat(v) > 0 ? parseFloat(v) : null })}
-                className="w-32"
-              />
+              <label className="text-xs text-slate-500 block mb-1">Project Revenue</label>
+              <div className="flex items-center gap-1">
+                <select
+                  value={curr}
+                  onChange={(e) => onUpdateProject(project.id, { revenueCurrency: e.target.value as 'USD' | 'CAD' })}
+                  onClick={(e) => e.stopPropagation()}
+                  className="rounded border border-slate-200 bg-white px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary/50"
+                >
+                  <option value="USD">USD</option>
+                  <option value="CAD">CAD</option>
+                </select>
+                <InlineEdit
+                  value={project.revenue ?? ''}
+                  type="number"
+                  prefix={currSymbol}
+                  placeholder="Set revenue"
+                  onSave={(v) => onUpdateProject(project.id, { revenue: parseFloat(v) > 0 ? parseFloat(v) : null })}
+                  className="w-32"
+                />
+              </div>
             </div>
             {loadedCost > 0 && (
               <div>
-                <label className="text-xs text-slate-500 block mb-1">Loaded Cost</label>
+                <label className="text-xs text-slate-500 block mb-1">Loaded Cost (USD)</label>
                 <span className="text-sm font-medium text-slate-700">${Math.round(loadedCost).toLocaleString()}</span>
               </div>
             )}
-            {revenue > 0 && loadedCost > 0 && (
+            {revenue > 0 && loadedCost > 0 && curr === 'USD' && (
               <div>
                 <label className="text-xs text-slate-500 block mb-1">Margin</label>
                 <span className={`text-sm font-bold ${margin >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                   ${Math.round(margin).toLocaleString()} ({marginPct}%)
                 </span>
+              </div>
+            )}
+            {revenue > 0 && loadedCost > 0 && curr === 'CAD' && (
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Margin</label>
+                <span className="text-xs text-slate-400 italic">Cost is USD, revenue is CAD</span>
               </div>
             )}
           </div>
