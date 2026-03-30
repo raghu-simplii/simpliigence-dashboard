@@ -149,19 +149,41 @@ export default function SettingsPage() {
           </div>
         </Card>
 
-        <Card title="Currency Settings">
-          <div className="flex items-center gap-4">
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-slate-700 mb-1">Exchange Rate (₹ per $1 USD)</label>
-              <input
-                type="number"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                value={settings.exchangeRate}
-                onChange={(e) => updateSettings({ exchangeRate: Number(e.target.value) || 0 })}
-              />
+        <Card title="Currency & Exchange Rates">
+          <p className="text-xs text-slate-400 mb-4">Set conversion rates used across the dashboard for cost and revenue calculations.</p>
+          <div className="space-y-4">
+            <div className="flex items-center gap-4">
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">USD to INR (₹ per $1 USD)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  value={settings.exchangeRate}
+                  onChange={(e) => updateSettings({ exchangeRate: Number(e.target.value) || 0 })}
+                />
+              </div>
+              <div className="text-sm text-slate-500 pt-6">
+                $1 USD = ₹{settings.exchangeRate.toLocaleString()}
+              </div>
             </div>
-            <div className="text-sm text-slate-500 pt-6">
-              ₹1,00,000 = ${Math.round(100000 / (settings.exchangeRate || 1)).toLocaleString()} USD
+            <div className="flex items-center gap-4">
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">CAD to USD ($ per CA$1)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  value={settings.cadToUsdRate}
+                  onChange={(e) => updateSettings({ cadToUsdRate: Number(e.target.value) || 0 })}
+                />
+              </div>
+              <div className="text-sm text-slate-500 pt-6">
+                CA$1 = ${settings.cadToUsdRate.toFixed(2)} USD
+              </div>
+            </div>
+            <div className="border-t border-slate-100 pt-3 text-xs text-slate-400">
+              <p>Quick reference: CA$100,000 = ${Math.round(100000 * (settings.cadToUsdRate || 0.73)).toLocaleString()} USD = ₹{Math.round(100000 * (settings.cadToUsdRate || 0.73) * (settings.exchangeRate || 83.5)).toLocaleString()} INR</p>
             </div>
           </div>
         </Card>

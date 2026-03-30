@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { useForecastStore, usePipelineStore } from '../store';
+import { useForecastStore, usePipelineStore, useFinancialStore } from '../store';
 import { PageHeader } from '../components/shared/PageHeader';
 import { Card, Badge } from '../components/ui';
 import { deriveProjectSummaries } from '../lib/parseSpreadsheet';
@@ -159,10 +159,11 @@ function InlineEdit({ value, onSave, type = 'text', prefix = '', placeholder = '
 }
 
 /* ── Project card ──────────────────────────────── */
-function ZohoProjectCard({ project, teamAllocation, loadedCost, onUpdateProject }: {
+function ZohoProjectCard({ project, teamAllocation, loadedCost, cadToUsdRate, onUpdateProject }: {
   project: ZohoPipelineProject;
   teamAllocation: { name: string; role: string; totalHours: number; rateCard: number | null }[] | undefined;
   loadedCost: number;
+  cadToUsdRate: number;
   onUpdateProject: (id: string, updates: Partial<ZohoPipelineProject>) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -176,8 +177,10 @@ function ZohoProjectCard({ project, teamAllocation, loadedCost, onUpdateProject 
   const revenue = project.revenue ?? 0;
   const curr = project.revenueCurrency ?? 'USD';
   const currSymbol = curr === 'CAD' ? 'CA$' : '$';
-  const margin = revenue - loadedCost;
-  const marginPct = revenue > 0 ? Math.round((margin / revenue) * 100) : 0;
+  // Convert revenue to USD for margin calculation
+  const revenueUsd = curr === 'CAD' ? revenue * cadToUsdRate : revenue;
+  const margin = revenueUsd - loadedCost;
+  const marginPct = revenueUsd > 0 ? Math.round((margin / revenueUsd) * 100) : 0;
 
   return (
     <Card>
@@ -223,9 +226,10 @@ function ZohoProjectCard({ project, teamAllocation, loadedCost, onUpdateProject 
               {loadedCost > 0 && (
                 <span className="flex items-center gap-1 text-slate-600"><TrendingUp size={12} /> Cost: ${Math.round(loadedCost).toLocaleString()} USD</span>
               )}
-              {revenue > 0 && loadedCost > 0 && curr === 'USD' && (
+              {revenue > 0 && loadedCost > 0 && (
                 <span className={`font-semibold ${margin >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                   Margin: ${Math.round(margin).toLocaleString()} ({marginPct}%)
+                  {curr === 'CAD' && <span className="font-normal text-slate-400 ml-1">(converted)</span>}
                 </span>
               )}
             </div>
@@ -352,18 +356,15 @@ function ZohoProjectCard({ project, teamAllocation, loadedCost, onUpdateProject 
                 <span className="text-sm font-medium text-slate-700">${Math.round(loadedCost).toLocaleString()}</span>
               </div>
             )}
-            {revenue > 0 && loadedCost > 0 && curr === 'USD' && (
+            {revenue > 0 && loadedCost > 0 && (
               <div>
-                <label className="text-xs text-slate-500 block mb-1">Margin</label>
+                <label className="text-xs text-slate-500 block mb-1">Margin {curr === 'CAD' ? '(CAD→USD converted)' : ''}</label>
                 <span className={`text-sm font-bold ${margin >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                   ${Math.round(margin).toLocaleString()} ({marginPct}%)
                 </span>
-              </div>
-            )}
-            {revenue > 0 && loadedCost > 0 && curr === 'CAD' && (
-              <div>
-                <label className="text-xs text-slate-500 block mb-1">Margin</label>
-                <span className="text-xs text-slate-400 italic">Cost is USD, revenue is CAD</span>
+                {curr === 'CAD' && (
+                  <span className="text-[10px] text-slate-400 block mt-0.5">Revenue {currSymbol}{revenue.toLocaleString()} × {cadToUsdRate} = ${Math.round(revenueUsd).toLocaleString()} USD</span>
+                )}
               </div>
             )}
           </div>
@@ -383,6 +384,7 @@ export default function ProjectPipelinePage() {
   const allProjects = usePipelineStore((s) => s.projects);
   const updateProject = usePipelineStore((s) => s.updateProject);
   const lastSync = usePipelineStore((s) => s.lastZohoSync);
+  const cadToUsdRate = useFinancialStore((s) => s.settings.cadToUsdRate) || 0.73;
 
   // Current projects = Zoho-sourced only
   const currentProjects = useMemo(() => allProjects.filter((p) => p.source === 'zoho'), [allProjects]);
@@ -460,6 +462,7 @@ export default function ProjectPipelinePage() {
               project={project}
               teamAllocation={ps?.employees}
               loadedCost={ps?.loadedCost ?? 0}
+              cadToUsdRate={cadToUsdRate}
               onUpdateProject={updateProject}
             />
           );
