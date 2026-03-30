@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { usePipelineStore } from '../store';
+import { usePipelineStore, useFinancialStore } from '../store';
 import { PageHeader } from '../components/shared/PageHeader';
 import { Card, Badge } from '../components/ui';
 import type { ZohoPipelineProject, PipelineResource } from '../types/forecast';
@@ -492,6 +492,13 @@ export default function PipelinePage() {
   const updateProject = usePipelineStore((s) => s.updateProject);
   const removeProject = usePipelineStore((s) => s.removeProject);
   const [showForm, setShowForm] = useState(false);
+  const cadToUsdRate = useFinancialStore((s) => s.settings.cadToUsdRate);
+
+  /** Convert a project's revenue to USD */
+  const toUsd = (p: ZohoPipelineProject) => {
+    if (!p.revenue) return 0;
+    return p.revenueCurrency === 'CAD' ? p.revenue * cadToUsdRate : p.revenue;
+  };
 
   // Pipeline = manually created projects only
   const pipelineProjects = useMemo(() => allProjects.filter((p) => p.source === 'manual'), [allProjects]);
@@ -499,7 +506,7 @@ export default function PipelinePage() {
   // Stats
   const proposed = pipelineProjects.filter((p) => p.status === 'Proposed').length;
   const negotiation = pipelineProjects.filter((p) => p.status === 'Negotiation').length;
-  const totalRevenue = pipelineProjects.reduce((sum, p) => sum + (p.revenue ?? 0), 0);
+  const totalRevenueUsd = pipelineProjects.reduce((sum, p) => sum + toUsd(p), 0);
 
   const handleAdd = (project: ZohoPipelineProject) => {
     addProject(project);
@@ -543,9 +550,9 @@ export default function PipelinePage() {
         </div>
         <div className="bg-white rounded-lg border border-slate-200 p-4">
           <div className="text-2xl font-bold text-emerald-600">
-            {totalRevenue > 0 ? `$${(totalRevenue / 1000).toFixed(0)}k` : '—'}
+            {totalRevenueUsd > 0 ? `$${(totalRevenueUsd / 1000).toFixed(0)}k` : '—'}
           </div>
-          <div className="text-xs text-slate-500">Pipeline Revenue</div>
+          <div className="text-xs text-slate-500">Pipeline Revenue (USD)</div>
         </div>
       </div>
 
@@ -600,7 +607,7 @@ export default function PipelinePage() {
                 const count = pipelineProjects.filter((p) => p.status === status).length;
                 const rev = pipelineProjects
                   .filter((p) => p.status === status)
-                  .reduce((sum, p) => sum + (p.revenue ?? 0), 0);
+                  .reduce((sum, p) => sum + toUsd(p), 0);
                 const maxCount = Math.max(pipelineProjects.length, 1);
                 const height = Math.max((count / maxCount) * 120, 8);
                 return (
