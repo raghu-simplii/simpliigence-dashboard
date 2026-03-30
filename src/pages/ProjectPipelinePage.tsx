@@ -234,16 +234,6 @@ export default function ProjectPipelinePage() {
     [projectSummaries, zohoNames],
   );
 
-  // Monthly hours chart data for forecast-only projects
-  const monthlyByProject = useMemo(() =>
-    MONTHS.map((m) => {
-      const entry: Record<string, unknown> = { month: m };
-      for (const p of forecastOnlyProjects) entry[p.name] = p.monthlyHours[m];
-      return entry;
-    }),
-    [forecastOnlyProjects],
-  );
-
   // Stats
   const activeZoho = zohoProjects.filter((p) => !['Completed', 'On Hold'].includes(p.status)).length;
   const totalPhases = zohoProjects.reduce((sum, p) => sum + (p.phases?.length ?? 0), 0);
