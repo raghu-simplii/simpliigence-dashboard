@@ -3,22 +3,24 @@ import type { ForecastAssignment, Month } from '../types/forecast';
 import type { RoleCategory } from '../types/hiringForecast';
 import { ROLE_CATEGORIES } from '../types/hiringForecast';
 
-/** Classify a spreadsheet role string into BA, JuniorDev, or SeniorDev. */
-export function classifyRole(role: string): RoleCategory {
+/** Classify a spreadsheet role string into BA, JuniorDev, SeniorDev, or null (not tracked for hiring). */
+export function classifyRole(role: string): RoleCategory | null {
   const lower = role.toLowerCase();
   if (lower.includes('senior') && lower.includes('developer')) return 'SeniorDev';
   if (lower.includes('developer')) return 'JuniorDev';
-  // BA bucket: analysts, consultants, leads, US resources, contractors, etc.
-  return 'BA';
+  if (lower.includes('analyst') || lower.includes(' ba')) return 'BA';
+  // Consultants, Team Leads, Contractors, US Resources, etc. — not tracked for hiring
+  return null;
 }
 
-/** Sum monthly hours from assignments grouped by role category. */
+/** Sum monthly hours from assignments grouped by role category (excludes untracked roles). */
 export function getProjectDemandByRole(
   assignments: ForecastAssignment[],
 ): Record<RoleCategory, Record<Month, number>> {
   const result = emptyRoleMonthRecord();
   for (const a of assignments) {
     const cat = classifyRole(a.role);
+    if (!cat) continue; // skip roles not tracked for hiring
     for (const m of MONTHS) {
       result[cat][m] += a.monthlyTotals[m] || 0;
     }
@@ -26,7 +28,7 @@ export function getProjectDemandByRole(
   return result;
 }
 
-/** Count unique employees per role category. */
+/** Count unique employees per role category (excludes untracked roles). */
 export function getCurrentHeadcountByRole(
   assignments: ForecastAssignment[],
 ): Record<RoleCategory, number> {
@@ -37,6 +39,7 @@ export function getCurrentHeadcountByRole(
   };
   for (const a of assignments) {
     const cat = classifyRole(a.role);
+    if (!cat) continue; // skip roles not tracked for hiring
     sets[cat].add(a.employeeName.toLowerCase());
   }
   return {
@@ -47,7 +50,7 @@ export function getCurrentHeadcountByRole(
 }
 
 /**
- * Compute historic utilization % per role category.
+ * Compute historic utilization % per role category (excludes untracked roles).
  * utilization = totalActualHours / (headcount × 160 × monthsWithData) × 100
  */
 export function getHistoricUtilization(
@@ -60,7 +63,6 @@ export function getHistoricUtilization(
 
   for (const cat of ROLE_CATEGORIES) {
     if (headcount[cat] === 0) continue;
-    // Count months that have any demand (to avoid dividing by empty months)
     let monthsActive = 0;
     let totalHours = 0;
     for (const m of MONTHS) {
