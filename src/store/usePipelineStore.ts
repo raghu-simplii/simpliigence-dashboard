@@ -71,7 +71,8 @@ export const usePipelineStore = create<PipelineState>()(
     }),
     {
       name: 'simpliigence-pipeline',
-      version: 1,
+      version: 2,
+      migrate: () => ({ projects: [], lastZohoSync: null }),
     },
   ),
 );

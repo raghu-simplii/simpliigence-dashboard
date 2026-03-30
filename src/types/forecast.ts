@@ -75,6 +75,8 @@ export interface ZohoPipelineProject {
   endDate: string | null;   // ISO date
   source: 'zoho' | 'manual';
   zohoId?: string;
+  /** Short name used in the forecast spreadsheet (for matching). */
+  forecastName?: string;
   /** Estimated resource needs (for forecast) */
   resources: PipelineResource[];
   /** Phases/milestones from Zoho */

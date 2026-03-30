@@ -34,6 +34,7 @@ export const ZOHO_SEED_PROJECTS: ZohoPipelineProject[] = [
     endDate: '2026-07-03',
     source: 'zoho',
     zohoId: '204610000003130003',
+    forecastName: 'QUData',
     resources: [],
     phases: [
       { id: '204610000003132003', name: 'Discovery', startDate: '2026-03-09', endDate: '2026-03-20', status: 'Completed', isClosed: true, completedOn: '2026-03-24', owner: 'Vasantha Kumar' },
@@ -57,6 +58,7 @@ export const ZOHO_SEED_PROJECTS: ZohoPipelineProject[] = [
     endDate: '2026-03-30',
     source: 'zoho',
     zohoId: '204610000002779003',
+    forecastName: 'Matheson',
     resources: [],
     phases: [
       { id: '204610000002811162', name: 'Project Prep / RG Session', startDate: '2026-01-13', endDate: '2026-01-23', status: 'Completed', isClosed: true, completedOn: '2026-01-30', owner: 'Vasantha Kumar' },
@@ -75,6 +77,7 @@ export const ZOHO_SEED_PROJECTS: ZohoPipelineProject[] = [
     endDate: '2026-06-30',
     source: 'zoho',
     zohoId: '204610000002746053',
+    forecastName: 'CoolAir',
     resources: [],
     phases: [
       { id: '204610000002900011', name: 'Project Prep', startDate: '2026-01-05', endDate: '2026-01-09', status: 'Completed', isClosed: true, completedOn: '2026-02-02', owner: 'Vasantha Kumar' },
@@ -118,6 +121,7 @@ export const ZOHO_SEED_PROJECTS: ZohoPipelineProject[] = [
     endDate: null,
     source: 'zoho',
     zohoId: '204610000002290021',
+    forecastName: 'LLI',
     resources: [],
     phases: [
       { id: '204610000002645057', name: 'Sprint 22', startDate: '2025-12-10', endDate: '2025-12-23', status: 'Completed', isClosed: true, completedOn: '2026-02-10', owner: 'Vasantha Kumar' },
@@ -137,6 +141,7 @@ export const ZOHO_SEED_PROJECTS: ZohoPipelineProject[] = [
     endDate: '2026-03-20',
     source: 'zoho',
     zohoId: '204610000002228021',
+    forecastName: 'AboveAll',
     resources: [],
     phases: [
       { id: '204610000002310014', name: 'Kick Off', startDate: '2025-09-03', endDate: '2025-09-03', status: 'Completed', isClosed: true, completedOn: '2025-10-07', owner: 'Lokanath GR' },

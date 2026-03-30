@@ -227,11 +227,20 @@ export default function ProjectPipelinePage() {
     return map;
   }, [projectSummaries]);
 
-  // Merge: show Zoho projects + any forecast-only projects not in Zoho
-  const zohoNames = useMemo(() => new Set(zohoProjects.map((p) => p.name.toLowerCase())), [zohoProjects]);
+  // Build a set of all forecast names that are claimed by a Zoho project
+  // (via forecastName alias or exact name match)
+  const claimedForecastNames = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of zohoProjects) {
+      if (p.forecastName) set.add(p.forecastName.toLowerCase());
+      set.add(p.name.toLowerCase());
+    }
+    return set;
+  }, [zohoProjects]);
+
   const forecastOnlyProjects = useMemo(
-    () => projectSummaries.filter((ps) => !zohoNames.has(ps.name.toLowerCase())),
-    [projectSummaries, zohoNames],
+    () => projectSummaries.filter((ps) => !claimedForecastNames.has(ps.name.toLowerCase())),
+    [projectSummaries, claimedForecastNames],
   );
 
   // Stats
@@ -280,7 +289,7 @@ export default function ProjectPipelinePage() {
           <ZohoProjectCard
             key={project.id}
             project={project}
-            teamAllocation={teamByProject.get(project.name.toLowerCase())?.employees}
+            teamAllocation={(teamByProject.get((project.forecastName ?? project.name).toLowerCase()) ?? teamByProject.get(project.name.toLowerCase()))?.employees}
           />
         ))}
       </div>
