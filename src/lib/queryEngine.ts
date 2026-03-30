@@ -121,16 +121,16 @@ type Intent =
 function detectIntent(query: string): Intent {
   const q = query.toLowerCase();
 
-  if (/\b(capacity|free|available|bench|idle|spare)\b/.test(q)) return 'capacity';
-  if (/\b(over\s?load|over\s?allocated|over\s?worked|over\s?booked|stretched)\b/.test(q)) return 'overloaded';
-  if (/\b(utiliz|usage|busy|occupied|loaded)\b/.test(q)) return 'utilization';
-  if (/\b(hire|hiring|recruit|need.*more|short|gap|staffing)\b/.test(q)) return 'hiring';
-  if (/\bwho.*(work|assign|allocat).*(on|to)\b/.test(q)) return 'project_team';
-  if (/\b(project|which project|most hours|biggest)\b/.test(q) && /\b(hour|time|effort)\b/.test(q)) return 'project_hours';
-  if (/\b(revenue|earn|billing|cost|money|dollar)\b/.test(q)) return 'revenue';
-  if (/\b(top|best|highest|most)\b/.test(q) && /\b(employee|person|people|resource)\b/.test(q)) return 'top_employees';
-  if (/\b(tell me about|info|details|profile)\b/.test(q)) return 'employee_info';
-  if (/\b(summary|overview|snapshot|status)\b/.test(q)) return 'summary';
+  if (/(overload|over-load|over allocated|overworked|over-worked|overbooked|over-booked|stretched thin)/.test(q)) return 'overloaded';
+  if (/(capacity|free |available|\bbench\b|\bidle\b|spare|bandwidth)/.test(q)) return 'capacity';
+  if (/(utiliz|usage|\bbusy\b|occupied|workload)/.test(q)) return 'utilization';
+  if (/(hire|hiring|recruit|need.*more|short(age)?|gap|staffing)/.test(q)) return 'hiring';
+  if (/who.*(work|assign|allocat).*(on|to|for)/.test(q)) return 'project_team';
+  if (/(project|which project|most hours|biggest).*(hour|time|effort)/.test(q)) return 'project_hours';
+  if (/(revenue|earn|billing|cost|money|dollar)/.test(q)) return 'revenue';
+  if (/(top|best|highest|most).*(employee|person|people|resource)/.test(q)) return 'top_employees';
+  if (/(tell me about|info on|details|profile)/.test(q)) return 'employee_info';
+  if (/(summary|overview|snapshot|status|how are we)/.test(q)) return 'summary';
 
   // Fallback: if mentions a project name, treat as project_team
   return 'unknown';
