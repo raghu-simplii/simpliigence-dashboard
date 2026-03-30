@@ -66,8 +66,7 @@ function extractRole(query: string): string | null {
   const lower = query.toLowerCase();
   for (const [role, keywords] of Object.entries(ROLE_KEYWORDS)) {
     for (const kw of keywords) {
-      const re = new RegExp(`\\b${kw}\\b`, 'i');
-      if (re.test(lower)) return role;
+      if (lower.includes(kw)) return role;
     }
   }
   return null;
@@ -333,7 +332,9 @@ function handleHiring(
   }
 
   const cap = capacityInMonths(months);
-  const recommendations: Array<{ role: string; count: number; avgUtil: number; totalGap: number }> = [];
+
+  type RoleStat = { role: string; headcount: number; totalHours: number; totalCapacity: number; avgUtil: number; spareHours: number; hiresNeeded: number };
+  const roleStats: RoleStat[] = [];
 
   for (const [role, group] of roleGroups) {
     if (roleKey && !ROLE_KEYWORDS[roleKey]?.some((kw) => role.toLowerCase().includes(kw))) continue;
@@ -341,38 +342,53 @@ function handleHiring(
     const totalHours = group.reduce((s, e) => s + hoursInMonths(e, months), 0);
     const totalCapacity = group.length * cap;
     const avgUtil = utilizationPct(totalHours, totalCapacity);
+    const spareHours = totalCapacity - totalHours;
 
+    // Hiring needed if avg util > 85% (targeting 80% utilization)
+    let hiresNeeded = 0;
     if (avgUtil > 85) {
-      const gap = totalHours - totalCapacity * 0.8; // target 80% utilization
-      const hiresNeeded = Math.ceil(gap / (cap * 0.8));
-      if (hiresNeeded > 0) {
-        recommendations.push({ role, count: hiresNeeded, avgUtil, totalGap: gap });
-      }
+      const gap = totalHours - totalCapacity * 0.8;
+      hiresNeeded = Math.ceil(gap / (cap * 0.8));
     }
+
+    roleStats.push({ role, headcount: group.length, totalHours, totalCapacity, avgUtil, spareHours, hiresNeeded });
   }
 
-  recommendations.sort((a, b) => b.totalGap - a.totalGap);
+  roleStats.sort((a, b) => b.avgUtil - a.avgUtil);
 
-  if (recommendations.length === 0) {
-    return { answer: `Based on current forecasts for **${periodLabel}**, no roles are above 85% average utilization. No immediate hiring needed, but monitor as new projects come in.` };
-  }
+  const totalHires = roleStats.reduce((s, r) => s + r.hiresNeeded, 0);
+  const rolesNeedingHires = roleStats.filter((r) => r.hiresNeeded > 0);
 
-  const totalHires = recommendations.reduce((s, r) => s + r.count, 0);
-  const lines = recommendations.map(
-    (r) => `- **${r.role}**: ${r.count} hire${r.count > 1 ? 's' : ''} recommended (team avg ${r.avgUtil}% utilized)`,
-  );
-
-  const data = recommendations.map((r) => ({
+  const data = roleStats.map((r) => ({
     Role: r.role,
-    'Current Avg Util': r.avgUtil + '%',
-    'Recommended Hires': r.count,
-    'Capacity Gap (hrs)': Math.round(r.totalGap),
+    Headcount: r.headcount,
+    'Allocated Hrs': r.totalHours,
+    'Capacity Hrs': r.totalCapacity,
+    'Spare Hrs': r.spareHours,
+    'Avg Util': r.avgUtil + '%',
+    'Hires Needed': r.hiresNeeded > 0 ? r.hiresNeeded : '—',
   }));
 
+  let answer: string;
+  if (totalHires > 0) {
+    const lines = rolesNeedingHires.map(
+      (r) => `- **${r.role}**: ${r.hiresNeeded} hire${r.hiresNeeded > 1 ? 's' : ''} needed (${r.avgUtil}% utilized, ${r.headcount} current)`,
+    );
+    answer = `**Hiring recommendation for ${periodLabel}** (target: 80% utilization):\n\nTotal hires needed: **${totalHires}**\n\n${lines.join('\n')}`;
+  } else {
+    const roleLabel = roleKey ? ROLE_KEYWORDS[roleKey]?.[0] + 's' : 'roles';
+    const totalSpare = roleStats.reduce((s, r) => s + r.spareHours, 0);
+    const avgUtil = roleStats.length > 0 ? Math.round(roleStats.reduce((s, r) => s + r.avgUtil, 0) / roleStats.length) : 0;
+    answer = `**No immediate hiring needed for ${roleLabel} in ${periodLabel}.**\n\n` +
+      `Current team: **${roleStats.reduce((s, r) => s + r.headcount, 0)}** people, avg utilization **${avgUtil}%**, ` +
+      `with **${formatHours(totalSpare)} spare hours** available.\n\n` +
+      `Below is the breakdown by role — consider hiring if new projects are expected:`;
+  }
+
   return {
-    answer: `**Hiring recommendation for ${periodLabel}** (targeting 80% utilization):\n\nTotal recommended: **${totalHires} hire${totalHires > 1 ? 's' : ''}**\n\n${lines.join('\n')}`,
+    answer,
     data: data as Array<Record<string, string | number>>,
-    columns: ['Role', 'Current Avg Util', 'Recommended Hires', 'Capacity Gap (hrs)'],
+    columns: ['Role', 'Headcount', 'Allocated Hrs', 'Capacity Hrs', 'Spare Hrs', 'Avg Util', 'Hires Needed'],
   };
 }
 
