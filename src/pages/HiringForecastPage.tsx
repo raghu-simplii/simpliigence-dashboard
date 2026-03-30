@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo } from 'react';
 import { Users, TrendingUp, AlertTriangle, UserPlus } from 'lucide-react';
 import { useForecastStore, useHiringForecastStore, usePipelineStore } from '../store';
 import { StatCard, Card } from '../components/ui';
@@ -6,53 +6,47 @@ import { PageHeader } from '../components/shared/PageHeader';
 import { MONTHS } from '../types/forecast';
 import type { Month } from '../types/forecast';
 import { ROLE_CATEGORIES, ROLE_CATEGORY_LABELS } from '../types/hiringForecast';
+import type { PipelineProject } from '../types/hiringForecast';
 import { computeHiringForecast, aggregateGapRows } from '../lib/hiringForecastCalc';
 import { DemandCapacityChart } from '../components/hiring/DemandCapacityChart';
 import { ConciergeConfigPanel } from '../components/hiring/ConciergeConfigPanel';
 import { StaffingRequestList } from '../components/hiring/StaffingRequestList';
-import { PipelineProjectList } from '../components/hiring/PipelineProjectList';
 
 export default function HiringForecastPage() {
   const assignments = useForecastStore((s) => s.assignments);
   const {
-    conciergeConfig, staffingRequests, pipelineProjects, scenarioSettings,
+    conciergeConfig, staffingRequests, scenarioSettings,
     setConciergeHours, addStaffingRequest, removeStaffingRequest,
-    addPipelineProject, removePipelineProject, updatePipelineProject,
-    setZohoProjects, updateScenarioSettings,
+    updateScenarioSettings,
   } = useHiringForecastStore();
-  const pipelineStore = usePipelineStore();
-  const [isSyncingZoho, setIsSyncingZoho] = useState(false);
+  const pipelineStoreProjects = usePipelineStore((s) => s.projects);
 
-  const handleSyncZoho = useCallback(async () => {
-    setIsSyncingZoho(true);
-    try {
-      // Import Zoho projects from the pipeline store (pre-synced via Claude session)
-      const zohoProjects = pipelineStore.projects.filter((p) => p.source === 'zoho');
-      if (zohoProjects.length === 0) {
-        alert('No Zoho projects found. Run "Sync from Zoho" in a Claude session first to pull projects from Zoho Projects.');
-        return;
-      }
-      // Convert PipelineProject (from pipelineStore) → HiringForecast PipelineProject format
-      const converted = zohoProjects.map((zp) => {
-        const startMonth = zp.startDate ? MONTHS[new Date(zp.startDate).getMonth()] : 'Jan' as Month;
-        const endMonth = zp.endDate ? MONTHS[new Date(zp.endDate).getMonth()] : 'Dec' as Month;
+  // Convert pipeline projects (manual source) from usePipelineStore → HiringForecast PipelineProject format
+  const pipelineProjects: PipelineProject[] = useMemo(() => {
+    return pipelineStoreProjects
+      .filter((p) => p.source === 'manual')
+      .map((zp) => {
+        const startMonth: Month = zp.startDate ? MONTHS[new Date(zp.startDate).getMonth()] : 'Jan';
+        const endMonth: Month = zp.endDate ? MONTHS[new Date(zp.endDate).getMonth()] : 'Dec';
+        const headcount = { BA: 0, JuniorDev: 0, SeniorDev: 0 } as Record<'BA' | 'JuniorDev' | 'SeniorDev', number>;
+        let hoursPerPerson = 160;
+        for (const r of zp.resources) {
+          if (r.roleCategory === 'BA' || r.roleCategory === 'JuniorDev' || r.roleCategory === 'SeniorDev') {
+            headcount[r.roleCategory] = r.count;
+            hoursPerPerson = r.hoursPerMonth || 160;
+          }
+        }
         return {
+          id: zp.id,
           projectName: zp.name,
           startMonth,
           endMonth,
-          headcount: { BA: 0, JuniorDev: 0, SeniorDev: 0 } as Record<'BA' | 'JuniorDev' | 'SeniorDev', number>,
-          hoursPerPerson: 160,
-          source: 'zoho' as const,
-          zohoId: zp.zohoId,
-          zohoStatus: zp.status,
-          zohoOwner: zp.owner,
+          headcount,
+          hoursPerPerson,
+          source: 'manual' as const,
         };
       });
-      setZohoProjects(converted);
-    } finally {
-      setIsSyncingZoho(false);
-    }
-  }, [pipelineStore.projects, setZohoProjects]);
+  }, [pipelineStoreProjects]);
 
   const gapRows = useMemo(
     () => computeHiringForecast(assignments, conciergeConfig, staffingRequests, pipelineProjects, scenarioSettings),
@@ -135,19 +129,16 @@ export default function HiringForecastPage() {
         <DemandCapacityChart rows={gapRows} />
       </Card>
 
-      {/* Pipeline Projects — full width */}
-      <Card title="Pipeline Projects" className="mb-6">
-        <p className="text-xs text-slate-400 mb-3">Add upcoming projects with start date, end date, and resource needs. Forecast updates automatically.</p>
-        <PipelineProjectList
-          projects={pipelineProjects}
-          onAdd={addPipelineProject}
-          onRemove={removePipelineProject}
-          onUpdate={updatePipelineProject}
-          onSyncZoho={handleSyncZoho}
-          isSyncingZoho={isSyncingZoho}
-          lastZohoSync={pipelineStore.lastZohoSync}
-        />
-      </Card>
+      {/* Pipeline info banner */}
+      {pipelineProjects.length > 0 && (
+        <Card className="mb-6">
+          <div className="flex items-center gap-3 text-sm">
+            <span className="text-violet-600 font-medium">{pipelineProjects.length} pipeline project{pipelineProjects.length > 1 ? 's' : ''}</span>
+            <span className="text-slate-400">contributing to demand forecast.</span>
+            <a href="pipeline" className="text-primary hover:underline text-xs font-medium ml-auto">Manage in Pipeline tab &rarr;</a>
+          </div>
+        </Card>
+      )}
 
       {/* Two-column: Concierge + Staffing */}
       <div className="grid grid-cols-2 gap-4 mb-6">

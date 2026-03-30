@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { usePipelineStore } from '../store';
 import { PageHeader } from '../components/shared/PageHeader';
 import { Card, Badge } from '../components/ui';
-import type { ZohoPipelineProject } from '../types/forecast';
+import type { ZohoPipelineProject, PipelineResource } from '../types/forecast';
 import {
   Plus,
   ArrowRightCircle,
@@ -11,9 +11,35 @@ import {
   DollarSign,
   Users,
   Layers,
+  UserPlus,
   X,
   Check,
 } from 'lucide-react';
+
+const ROLE_LABELS: Record<string, string> = {
+  BA: 'BAs',
+  JuniorDev: 'Jr Devs',
+  SeniorDev: 'Sr Devs',
+};
+
+/** Helper to get headcount from resources array */
+function getHeadcount(resources: PipelineResource[], role: string): number {
+  return resources.find((r) => r.roleCategory === role)?.count ?? 0;
+}
+
+/** Build resources array from headcount values */
+function buildResources(ba: number, jd: number, sd: number, hrsPerMonth = 160): PipelineResource[] {
+  const res: PipelineResource[] = [];
+  if (ba > 0) res.push({ roleCategory: 'BA', count: ba, hoursPerMonth: hrsPerMonth });
+  if (jd > 0) res.push({ roleCategory: 'JuniorDev', count: jd, hoursPerMonth: hrsPerMonth });
+  if (sd > 0) res.push({ roleCategory: 'SeniorDev', count: sd, hoursPerMonth: hrsPerMonth });
+  return res;
+}
+
+/** Total people from resources */
+function totalPeople(resources: PipelineResource[]): number {
+  return resources.reduce((sum, r) => sum + r.count, 0);
+}
 
 /* ── Status badge helper ─────────────────────── */
 function statusVariant(status: string) {
@@ -75,6 +101,9 @@ function NewProjectForm({ onAdd, onCancel }: { onAdd: (p: ZohoPipelineProject) =
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [revenue, setRevenue] = useState('');
+  const [baCount, setBaCount] = useState(0);
+  const [jdCount, setJdCount] = useState(0);
+  const [sdCount, setSdCount] = useState(0);
   const nameRef = useRef<HTMLInputElement>(null);
   useEffect(() => { nameRef.current?.focus(); }, []);
 
@@ -90,7 +119,7 @@ function NewProjectForm({ onAdd, onCancel }: { onAdd: (p: ZohoPipelineProject) =
       endDate: endDate || null,
       source: 'manual',
       revenue: parseFloat(revenue) > 0 ? parseFloat(revenue) : null,
-      resources: [],
+      resources: buildResources(baCount, jdCount, sdCount),
     };
     onAdd(project);
   };
@@ -171,6 +200,30 @@ function NewProjectForm({ onAdd, onCancel }: { onAdd: (p: ZohoPipelineProject) =
           </div>
         </div>
 
+        {/* Resource needs */}
+        <div>
+          <label className="text-xs text-slate-500 block mb-2 flex items-center gap-1">
+            <UserPlus size={12} /> Resource Needs (headcount) — feeds into Hiring Forecast
+          </label>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="text-[10px] text-slate-400 block mb-1">Business Analysts</label>
+              <input type="number" min={0} value={baCount} onChange={(e) => setBaCount(Math.max(0, Number(e.target.value) || 0))}
+                className="w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary/50" />
+            </div>
+            <div>
+              <label className="text-[10px] text-slate-400 block mb-1">Junior Developers</label>
+              <input type="number" min={0} value={jdCount} onChange={(e) => setJdCount(Math.max(0, Number(e.target.value) || 0))}
+                className="w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary/50" />
+            </div>
+            <div>
+              <label className="text-[10px] text-slate-400 block mb-1">Senior Developers</label>
+              <input type="number" min={0} value={sdCount} onChange={(e) => setSdCount(Math.max(0, Number(e.target.value) || 0))}
+                className="w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary/50" />
+            </div>
+          </div>
+        </div>
+
         <div className="flex gap-2 pt-2">
           <button
             type="submit"
@@ -228,6 +281,12 @@ function PipelineProjectCard({
             {revenue > 0 && (
               <span className="flex items-center gap-1 text-emerald-700">
                 <DollarSign size={12} /> Est. Revenue: ${revenue.toLocaleString()}
+              </span>
+            )}
+            {totalPeople(project.resources) > 0 && (
+              <span className="flex items-center gap-1 text-violet-700">
+                <UserPlus size={12} />
+                {project.resources.map((r) => `${r.count} ${ROLE_LABELS[r.roleCategory] ?? r.roleCategory}`).join(', ')}
               </span>
             )}
           </div>
@@ -360,6 +419,40 @@ function PipelineProjectCard({
                 onSave={(v) => onUpdate(project.id, { goLiveDate: v || null })}
                 className="w-36"
               />
+            </div>
+          </div>
+
+          {/* Resource needs */}
+          <div className="mt-4 pt-3 border-t border-slate-100">
+            <label className="text-xs text-slate-500 block mb-2 flex items-center gap-1">
+              <UserPlus size={12} /> Resource Needs (feeds into Hiring Forecast)
+            </label>
+            <div className="flex gap-4 items-end">
+              {(['BA', 'JuniorDev', 'SeniorDev'] as const).map((role) => (
+                <div key={role}>
+                  <label className="text-[10px] text-slate-400 block mb-1">{ROLE_LABELS[role]}</label>
+                  <input
+                    type="number"
+                    min={0}
+                    className="w-16 rounded border border-slate-200 bg-white px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-primary/50"
+                    value={getHeadcount(project.resources, role)}
+                    onChange={(e) => {
+                      const val = Math.max(0, Number(e.target.value) || 0);
+                      const updated = buildResources(
+                        role === 'BA' ? val : getHeadcount(project.resources, 'BA'),
+                        role === 'JuniorDev' ? val : getHeadcount(project.resources, 'JuniorDev'),
+                        role === 'SeniorDev' ? val : getHeadcount(project.resources, 'SeniorDev'),
+                      );
+                      onUpdate(project.id, { resources: updated });
+                    }}
+                  />
+                </div>
+              ))}
+              {totalPeople(project.resources) > 0 && (
+                <span className="text-[10px] text-slate-400 pb-1">
+                  = {totalPeople(project.resources)} people × 160 hrs/mo
+                </span>
+              )}
             </div>
           </div>
         </div>
