@@ -4,7 +4,73 @@ import { PageHeader } from '../components/shared/PageHeader';
 import { Card, Badge } from '../components/ui';
 import { MONTHS, emptyMonthRecord } from '../types/forecast';
 import type { Month, ForecastAssignment } from '../types/forecast';
-import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, ChevronLeft, Plus, Trash2 } from 'lucide-react';
+
+/* ─── week date helpers ────────────────────────────────── */
+function getWeeksInMonth(year: number, monthIdx: number): string[] {
+  const weeks: string[] = [];
+  // Find first Monday on or before the 1st of the month
+  const first = new Date(year, monthIdx, 1);
+  const day = first.getDay();
+  // Go to previous Monday (week start)
+  const startOffset = day === 0 ? -6 : 1 - day;
+  const weekStart = new Date(year, monthIdx, 1 + startOffset);
+
+  // Generate weeks that overlap with this month
+  const d = new Date(weekStart);
+  while (d.getMonth() <= monthIdx || (d.getMonth() === 11 && monthIdx === 0)) {
+    // Include week if it overlaps with the target month
+    const weekEnd = new Date(d);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    if (d.getMonth() === monthIdx || weekEnd.getMonth() === monthIdx) {
+      weeks.push(d.toISOString().slice(0, 10));
+    }
+    d.setDate(d.getDate() + 7);
+    // Stop if we've gone past the month
+    if (d.getMonth() > monthIdx && d.getFullYear() >= year) break;
+    if (d.getFullYear() > year) break;
+    if (weeks.length >= 6) break; // safety
+  }
+  return weeks;
+}
+
+function formatWeekLabel(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+}
+
+function getMonthFromWeek(dateStr: string): Month {
+  const d = new Date(dateStr + 'T00:00:00');
+  return MONTHS[d.getMonth()];
+}
+
+/** Distribute monthly hours evenly across weeks for display when weeklyHours is empty */
+function getWeeklyHoursForAssignment(
+  a: ForecastAssignment,
+  weekDates: string[],
+): Record<string, number> {
+  // If weeklyHours has data for any of these weeks, use it
+  const hasWeeklyData = weekDates.some((w) => (a.weeklyHours[w] ?? 0) > 0);
+  if (hasWeeklyData) {
+    const result: Record<string, number> = {};
+    for (const w of weekDates) result[w] = a.weeklyHours[w] ?? 0;
+    return result;
+  }
+  // Otherwise distribute monthly hours across weeks in that month
+  const result: Record<string, number> = {};
+  const monthWeekCounts: Record<string, number> = {};
+  for (const w of weekDates) {
+    const m = getMonthFromWeek(w);
+    monthWeekCounts[m] = (monthWeekCounts[m] ?? 0) + 1;
+  }
+  for (const w of weekDates) {
+    const m = getMonthFromWeek(w);
+    const total = a.monthlyTotals[m] ?? 0;
+    const count = monthWeekCounts[m] ?? 1;
+    result[w] = Math.round(total / count);
+  }
+  return result;
+}
 
 /* ─── tiny inline-edit input ─────────────────────────────────── */
 function InlineInput({
@@ -136,7 +202,7 @@ function AddResourceForm({
   );
 }
 
-/* ─── Employee group: one row per project ────────────────────── */
+/* ─── Employee group ────────────────────────────────────── */
 interface EmployeeGroup {
   name: string;
   role: string;
@@ -161,15 +227,7 @@ function groupAssignments(assignments: ForecastAssignment[]): EmployeeGroup[] {
         (sum, a) => sum + MONTHS.reduce((s, m) => s + a.monthlyTotals[m], 0),
         0,
       );
-      return {
-        name,
-        role: first.role,
-        rateCard: first.rateCard,
-        isSI: first.isSI,
-        isContractor: first.isContractor,
-        assignments: assgns,
-        totalHours,
-      };
+      return { name, role: first.role, rateCard: first.rateCard, isSI: first.isSI, isContractor: first.isContractor, assignments: assgns, totalHours };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -183,7 +241,7 @@ export default function TeamRosterPage() {
   const {
     addAssignment,
     removeEmployee,
-    updateMonthlyHours,
+    updateWeeklyHours,
     renameEmployee,
     updateEmployeeRole,
     updateEmployeeRate,
@@ -191,7 +249,10 @@ export default function TeamRosterPage() {
   } = useForecastStore();
 
   const groups = useMemo(() => groupAssignments(assignments), [assignments]);
+  const now = new Date();
+  const currentMonthIdx = now.getMonth();
 
+  const [selectedMonthIdx, setSelectedMonthIdx] = useState(currentMonthIdx);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
@@ -201,11 +262,11 @@ export default function TeamRosterPage() {
   const [addingProjectFor, setAddingProjectFor] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
+  const selectedMonth = MONTHS[selectedMonthIdx];
+  const weekDates = useMemo(() => getWeeksInMonth(2026, selectedMonthIdx), [selectedMonthIdx]);
+
   const roles = useMemo(() => [...new Set(groups.map((g) => g.role).filter(Boolean))].sort(), [groups]);
-  const allProjects = useMemo(
-    () => [...new Set(assignments.map((a) => a.project))].sort(),
-    [assignments],
-  );
+  const allProjects = useMemo(() => [...new Set(assignments.map((a) => a.project))].sort(), [assignments]);
 
   const filtered = useMemo(() => {
     return groups.filter((g) => {
@@ -231,13 +292,13 @@ export default function TeamRosterPage() {
     [editing],
   );
 
-  const handleHoursSave = useCallback(
-    (empName: string, project: string, month: Month, val: string) => {
+  const handleWeekHoursSave = useCallback(
+    (empName: string, project: string, weekDate: string, val: string) => {
       const hrs = parseFloat(val) || 0;
-      updateMonthlyHours(empName, project, month, hrs);
+      updateWeeklyHours(empName, project, weekDate, hrs);
       setEditing(null);
     },
-    [updateMonthlyHours],
+    [updateWeeklyHours],
   );
 
   const handleNameSave = useCallback(
@@ -249,19 +310,12 @@ export default function TeamRosterPage() {
   );
 
   const handleRoleSave = useCallback(
-    (empName: string, val: string) => {
-      updateEmployeeRole(empName, val);
-      setEditing(null);
-    },
+    (empName: string, val: string) => { updateEmployeeRole(empName, val); setEditing(null); },
     [updateEmployeeRole],
   );
 
   const handleRateSave = useCallback(
-    (empName: string, val: string) => {
-      const rate = parseFloat(val);
-      updateEmployeeRate(empName, rate > 0 ? rate : null);
-      setEditing(null);
-    },
+    (empName: string, val: string) => { updateEmployeeRate(empName, parseFloat(val) > 0 ? parseFloat(val) : null); setEditing(null); },
     [updateEmployeeRate],
   );
 
@@ -275,10 +329,7 @@ export default function TeamRosterPage() {
   );
 
   const handleAddResource = useCallback(
-    (a: ForecastAssignment) => {
-      addAssignment(a);
-      setShowAddForm(false);
-    },
+    (a: ForecastAssignment) => { addAssignment(a); setShowAddForm(false); },
     [addAssignment],
   );
 
@@ -286,15 +337,10 @@ export default function TeamRosterPage() {
     (empName: string, projectName: string) => {
       const existing = assignments.find((a) => a.employeeName === empName);
       addAssignment({
-        employeeName: empName,
-        notes: '',
-        role: existing?.role ?? '',
-        rateCard: existing?.rateCard ?? null,
-        isSI: existing?.isSI ?? false,
-        isContractor: existing?.isContractor ?? false,
-        project: projectName,
-        weeklyHours: {},
-        monthlyTotals: emptyMonthRecord(),
+        employeeName: empName, notes: '', role: existing?.role ?? '',
+        rateCard: existing?.rateCard ?? null, isSI: existing?.isSI ?? false,
+        isContractor: existing?.isContractor ?? false, project: projectName,
+        weeklyHours: {}, monthlyTotals: emptyMonthRecord(),
       });
       setAddingProjectFor(null);
       setExpandedEmp((prev) => new Set(prev).add(empName));
@@ -303,18 +349,13 @@ export default function TeamRosterPage() {
   );
 
   const handleDeleteEmployee = useCallback(
-    (empName: string) => {
-      removeEmployee(empName);
-      setConfirmDelete(null);
-    },
+    (empName: string) => { removeEmployee(empName); setConfirmDelete(null); },
     [removeEmployee],
   );
 
   const handleRemoveAssignment = useCallback(
     (empName: string, project: string) => {
-      const idx = assignments.findIndex(
-        (a) => a.employeeName === empName && a.project === project,
-      );
+      const idx = assignments.findIndex((a) => a.employeeName === empName && a.project === project);
       if (idx >= 0) useForecastStore.getState().removeAssignment(idx);
     },
     [assignments],
@@ -330,13 +371,7 @@ export default function TeamRosterPage() {
       <Card>
         {/* Toolbar */}
         <div className="flex flex-wrap gap-3 mb-4">
-          <input
-            type="text"
-            placeholder="Search by name..."
-            className="flex-1 min-w-[180px] rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+          <input type="text" placeholder="Search by name..." className="flex-1 min-w-[160px] rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" value={search} onChange={(e) => setSearch(e.target.value)} />
           <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
             <option value="">All Roles</option>
             {roles.map((r) => <option key={r} value={r}>{r}</option>)}
@@ -345,17 +380,48 @@ export default function TeamRosterPage() {
             <option value="">All Projects</option>
             {allProjects.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
-          <button onClick={() => setShowAddForm((v) => !v)} className="px-4 py-2 text-sm font-medium rounded-lg bg-primary text-white hover:bg-primary/90">
-            + Add Resource
+          <button onClick={() => setShowAddForm((v) => !v)} className="px-4 py-2 text-sm font-medium rounded-lg bg-primary text-white hover:bg-primary/90">+ Add Resource</button>
+        </div>
+
+        {showAddForm && <AddResourceForm roles={roles} projects={allProjects} onAdd={handleAddResource} onCancel={() => setShowAddForm(false)} />}
+
+        {/* Month selector */}
+        <div className="flex items-center gap-2 mb-4">
+          <button
+            onClick={() => setSelectedMonthIdx(Math.max(0, selectedMonthIdx - 1))}
+            disabled={selectedMonthIdx === 0}
+            className="p-1 rounded hover:bg-slate-100 disabled:opacity-30"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <div className="flex gap-1">
+            {MONTHS.map((m, i) => (
+              <button
+                key={m}
+                onClick={() => setSelectedMonthIdx(i)}
+                className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors ${
+                  i === selectedMonthIdx
+                    ? 'bg-primary text-white'
+                    : i === currentMonthIdx
+                      ? 'bg-primary/10 text-primary hover:bg-primary/20'
+                      : 'text-slate-500 hover:bg-slate-100'
+                }`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => setSelectedMonthIdx(Math.min(11, selectedMonthIdx + 1))}
+            disabled={selectedMonthIdx === 11}
+            className="p-1 rounded hover:bg-slate-100 disabled:opacity-30"
+          >
+            <ChevronRight size={16} />
           </button>
         </div>
 
-        {showAddForm && (
-          <AddResourceForm roles={roles} projects={allProjects} onAdd={handleAddResource} onCancel={() => setShowAddForm(false)} />
-        )}
-
         <p className="text-xs text-slate-400 mb-3">
-          Click any cell to edit. Expand a resource to see and edit hours per project.
+          Showing weeks in <strong>{selectedMonth} 2026</strong>. Click any hour cell to edit. Expand a resource to see hours by project.
         </p>
 
         {confirmDelete && (
@@ -374,39 +440,45 @@ export default function TeamRosterPage() {
             <thead>
               <tr className="border-b border-slate-200 text-left">
                 <th className="pb-3 pr-2 w-6" />
-                <th className="pb-3 pr-4 font-semibold text-slate-600">Name</th>
-                <th className="pb-3 pr-4 font-semibold text-slate-600">Role</th>
-                <th className="pb-3 pr-3 font-semibold text-slate-600">Rate</th>
-                <th className="pb-3 pr-3 font-semibold text-slate-600">Type</th>
-                <th className="pb-3 pr-3 font-semibold text-slate-600">Projects</th>
-                {MONTHS.map((m) => (
-                  <th key={m} className="pb-3 pr-1 font-semibold text-slate-600 text-right w-14 text-xs">{m}</th>
+                <th className="pb-3 pr-3 font-semibold text-slate-600 min-w-[140px]">Name</th>
+                <th className="pb-3 pr-3 font-semibold text-slate-600 min-w-[100px]">Role</th>
+                <th className="pb-3 pr-3 font-semibold text-slate-600 w-16">Rate</th>
+                <th className="pb-3 pr-3 font-semibold text-slate-600 w-20">Type</th>
+                <th className="pb-3 pr-3 font-semibold text-slate-600 w-16">Projects</th>
+                {weekDates.map((w) => (
+                  <th key={w} className="pb-3 pr-1 font-semibold text-slate-600 text-center w-16">
+                    <div className="text-[10px] leading-tight">{formatWeekLabel(w)}</div>
+                  </th>
                 ))}
-                <th className="pb-3 font-semibold text-slate-600 text-right">Total</th>
+                <th className="pb-3 font-semibold text-slate-600 text-right w-16">{selectedMonth}</th>
+                <th className="pb-3 font-semibold text-slate-600 text-right w-16">Year</th>
                 <th className="pb-3 w-8" />
               </tr>
             </thead>
             <tbody>
               {filtered.map((g) => {
                 const isExpanded = expandedEmp.has(g.name);
-                const empTotals: Record<Month, number> = { ...emptyMonthRecord() };
+
+                // Compute weekly totals across all projects
+                const empWeeklyTotals: Record<string, number> = {};
+                for (const w of weekDates) empWeeklyTotals[w] = 0;
                 for (const a of g.assignments) {
-                  for (const m of MONTHS) empTotals[m] += a.monthlyTotals[m];
+                  const weeklyForA = getWeeklyHoursForAssignment(a, weekDates);
+                  for (const w of weekDates) empWeeklyTotals[w] += weeklyForA[w] ?? 0;
                 }
+                const monthTotal = g.assignments.reduce((s, a) => s + (a.monthlyTotals[selectedMonth] ?? 0), 0);
 
                 return (
                   <Fragment key={g.name}>
                     {/* Employee summary row */}
                     <tr className="border-b border-slate-100 hover:bg-slate-50 group">
-                      {/* Expand toggle */}
                       <td className="py-2 pr-2">
                         <button onClick={() => toggleExpand(g.name)} className="text-slate-400 hover:text-slate-600">
                           {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                         </button>
                       </td>
 
-                      {/* Name */}
-                      <td className="py-2 pr-4 font-medium text-slate-800 cursor-pointer min-w-[130px]"
+                      <td className="py-2 pr-3 font-medium text-slate-800 cursor-pointer"
                         onClick={() => setEditing({ empName: g.name, project: '', field: 'name' })}
                       >
                         {isEditing(g.name, '', 'name') ? (
@@ -416,8 +488,7 @@ export default function TeamRosterPage() {
                         )}
                       </td>
 
-                      {/* Role */}
-                      <td className="py-2 pr-4 text-slate-600 text-xs cursor-pointer min-w-[90px]"
+                      <td className="py-2 pr-3 text-slate-600 text-xs cursor-pointer"
                         onClick={() => setEditing({ empName: g.name, project: '', field: 'role' })}
                       >
                         {isEditing(g.name, '', 'role') ? (
@@ -427,54 +498,67 @@ export default function TeamRosterPage() {
                         )}
                       </td>
 
-                      {/* Rate */}
-                      <td className="py-2 pr-3 text-slate-600 cursor-pointer"
+                      <td className="py-2 pr-3 text-slate-600 cursor-pointer text-xs"
                         onClick={() => setEditing({ empName: g.name, project: '', field: 'rate' })}
                       >
                         {isEditing(g.name, '', 'rate') ? (
-                          <InlineInput value={g.rateCard ?? 0} type="number" onSave={(v) => handleRateSave(g.name, v)} className="w-16" />
+                          <InlineInput value={g.rateCard ?? 0} type="number" onSave={(v) => handleRateSave(g.name, v)} className="w-14" />
                         ) : (
-                          <span className="hover:text-primary text-xs">{g.rateCard ? `$${g.rateCard}` : '—'}</span>
+                          <span className="hover:text-primary">{g.rateCard ? `$${g.rateCard}` : '—'}</span>
                         )}
                       </td>
 
-                      {/* Type */}
                       <td className="py-2 pr-3">
                         <button onClick={() => handleTypeCycle(g.name, g.isSI, g.isContractor)} title="Click to change">
                           {g.isContractor ? <Badge variant="warning">Contractor</Badge> : g.isSI ? <Badge variant="info">SI</Badge> : <Badge variant="neutral">Employee</Badge>}
                         </button>
                       </td>
 
-                      {/* Projects count */}
                       <td className="py-2 pr-3 text-xs text-slate-500">
-                        {g.assignments.length} project{g.assignments.length !== 1 ? 's' : ''}
+                        {g.assignments.length}
                       </td>
 
-                      {/* Monthly totals (sum across projects) */}
-                      {MONTHS.map((m) => (
-                        <td key={m} className="py-2 pr-1 text-right tabular-nums">
+                      {/* Weekly totals (summary, not directly editable — expand to edit per project) */}
+                      {weekDates.map((w) => (
+                        <td
+                          key={w}
+                          className="py-2 pr-1 text-center tabular-nums cursor-pointer"
+                          onClick={() => {
+                            if (g.assignments.length === 1) {
+                              setEditing({ empName: g.name, project: g.assignments[0].project, field: w });
+                              setExpandedEmp((prev) => new Set(prev).add(g.name));
+                            } else {
+                              toggleExpand(g.name);
+                            }
+                          }}
+                          title={g.assignments.length === 1 ? 'Click to edit' : 'Click to expand projects'}
+                        >
                           <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium ${
-                            empTotals[m] > 0
-                              ? empTotals[m] >= 160 ? 'bg-green-50 text-green-700' : 'bg-blue-50 text-blue-700'
+                            empWeeklyTotals[w] > 0
+                              ? empWeeklyTotals[w] >= 40 ? 'bg-green-50 text-green-700' : 'bg-blue-50 text-blue-700'
                               : 'text-slate-300'
                           }`}>
-                            {empTotals[m] > 0 ? empTotals[m] : '—'}
+                            {empWeeklyTotals[w] > 0 ? empWeeklyTotals[w] : '—'}
                           </span>
                         </td>
                       ))}
 
-                      {/* Total */}
                       <td className="py-2 text-right">
-                        <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${
-                          g.totalHours >= 800 ? 'text-green-600 bg-green-50' :
-                          g.totalHours >= 400 ? 'text-blue-600 bg-blue-50' :
-                          g.totalHours > 0 ? 'text-amber-600 bg-amber-50' : 'text-slate-400 bg-slate-50'
+                        <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-bold ${
+                          monthTotal >= 160 ? 'text-green-600 bg-green-50' : monthTotal > 0 ? 'text-blue-600 bg-blue-50' : 'text-slate-300'
                         }`}>
-                          {g.totalHours.toLocaleString()}
+                          {monthTotal > 0 ? monthTotal : '—'}
                         </span>
                       </td>
 
-                      {/* Delete */}
+                      <td className="py-2 text-right">
+                        <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-bold ${
+                          g.totalHours >= 800 ? 'text-green-600 bg-green-50' : g.totalHours >= 400 ? 'text-blue-600 bg-blue-50' : g.totalHours > 0 ? 'text-amber-600 bg-amber-50' : 'text-slate-300'
+                        }`}>
+                          {g.totalHours > 0 ? g.totalHours.toLocaleString() : '—'}
+                        </span>
+                      </td>
+
                       <td className="py-2 text-center">
                         <button onClick={() => setConfirmDelete(g.name)} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-opacity" title="Remove resource">
                           <Trash2 size={14} />
@@ -482,51 +566,55 @@ export default function TeamRosterPage() {
                       </td>
                     </tr>
 
-                    {/* Expanded: per-project rows */}
+                    {/* Expanded: per-project rows with editable weekly cells */}
                     {isExpanded && g.assignments.map((a) => {
-                      const projTotal = MONTHS.reduce((s, m) => s + a.monthlyTotals[m], 0);
+                      const weeklyForA = getWeeklyHoursForAssignment(a, weekDates);
+                      const projMonthTotal = a.monthlyTotals[selectedMonth] ?? 0;
+                      const projYearTotal = MONTHS.reduce((s, m) => s + (a.monthlyTotals[m] ?? 0), 0);
+
                       return (
                         <tr key={`${g.name}-${a.project}`} className="border-b border-slate-50 bg-slate-50/50">
                           <td />
-                          <td colSpan={4} className="py-1.5 pl-6 pr-4">
+                          <td colSpan={4} className="py-1.5 pl-6 pr-3">
                             <div className="flex items-center gap-2">
                               <span className="inline-block bg-primary/10 text-primary text-xs px-2 py-0.5 rounded font-medium">{a.project}</span>
                               {g.assignments.length > 1 && (
-                                <button
-                                  onClick={() => handleRemoveAssignment(g.name, a.project)}
-                                  className="text-slate-300 hover:text-red-400"
-                                  title="Remove this project allocation"
-                                >
+                                <button onClick={() => handleRemoveAssignment(g.name, a.project)} className="text-slate-300 hover:text-red-400" title="Remove this project allocation">
                                   <Trash2 size={12} />
                                 </button>
                               )}
                             </div>
                           </td>
                           <td />
-                          {MONTHS.map((m) => (
+
+                          {weekDates.map((w) => (
                             <td
-                              key={m}
-                              className="py-1.5 pr-1 text-right tabular-nums cursor-pointer"
-                              onClick={() => setEditing({ empName: g.name, project: a.project, field: m })}
+                              key={w}
+                              className="py-1.5 pr-1 text-center tabular-nums cursor-pointer"
+                              onClick={() => setEditing({ empName: g.name, project: a.project, field: w })}
                             >
-                              {isEditing(g.name, a.project, m) ? (
+                              {isEditing(g.name, a.project, w) ? (
                                 <InlineInput
-                                  value={a.monthlyTotals[m]}
+                                  value={weeklyForA[w] ?? 0}
                                   type="number"
-                                  onSave={(v) => handleHoursSave(g.name, a.project, m as Month, v)}
-                                  className="w-14 text-right text-xs"
+                                  onSave={(v) => handleWeekHoursSave(g.name, a.project, w, v)}
+                                  className="w-12 text-center text-xs"
                                 />
                               ) : (
                                 <span className={`inline-block px-1 py-0.5 rounded text-[11px] hover:ring-1 hover:ring-primary/30 ${
-                                  a.monthlyTotals[m] > 0 ? 'text-slate-600' : 'text-slate-300'
+                                  (weeklyForA[w] ?? 0) > 0 ? 'text-slate-600' : 'text-slate-300'
                                 }`}>
-                                  {a.monthlyTotals[m] > 0 ? a.monthlyTotals[m] : '—'}
+                                  {(weeklyForA[w] ?? 0) > 0 ? weeklyForA[w] : '—'}
                                 </span>
                               )}
                             </td>
                           ))}
+
                           <td className="py-1.5 text-right">
-                            <span className="text-xs text-slate-500 font-medium">{projTotal > 0 ? projTotal : '—'}</span>
+                            <span className="text-xs text-slate-500 font-medium">{projMonthTotal > 0 ? projMonthTotal : '—'}</span>
+                          </td>
+                          <td className="py-1.5 text-right">
+                            <span className="text-xs text-slate-400">{projYearTotal > 0 ? projYearTotal : '—'}</span>
                           </td>
                           <td />
                         </tr>
@@ -540,33 +628,23 @@ export default function TeamRosterPage() {
                         <td colSpan={5} className="py-1.5 pl-6">
                           {addingProjectFor === g.name ? (
                             <div className="flex items-center gap-2">
-                              <select
-                                className="rounded border border-slate-300 px-1.5 py-0.5 text-xs"
-                                defaultValue=""
-                                onChange={(e) => {
-                                  if (e.target.value) handleAddProject(g.name, e.target.value);
-                                }}
+                              <select className="rounded border border-slate-300 px-1.5 py-0.5 text-xs" defaultValue=""
+                                onChange={(e) => { if (e.target.value) handleAddProject(g.name, e.target.value); }}
                               >
                                 <option value="">Select project...</option>
-                                {allProjects
-                                  .filter((p) => !g.assignments.some((a) => a.project === p))
-                                  .map((p) => <option key={p} value={p}>{p}</option>)}
+                                {allProjects.filter((p) => !g.assignments.some((a) => a.project === p)).map((p) => <option key={p} value={p}>{p}</option>)}
                                 <option value="__new__">+ New project</option>
                               </select>
                               <button onClick={() => setAddingProjectFor(null)} className="text-xs text-slate-400 hover:text-slate-600">Cancel</button>
                             </div>
                           ) : (
-                            <button
-                              onClick={() => setAddingProjectFor(g.name)}
-                              className="text-xs text-primary/60 hover:text-primary font-medium flex items-center gap-1"
-                            >
+                            <button onClick={() => setAddingProjectFor(g.name)} className="text-xs text-primary/60 hover:text-primary font-medium flex items-center gap-1">
                               <Plus size={12} /> Add project
                             </button>
                           )}
                         </td>
-                        {MONTHS.map((m) => <td key={m} />)}
-                        <td />
-                        <td />
+                        {weekDates.map((w) => <td key={w} />)}
+                        <td /><td /><td />
                       </tr>
                     )}
                   </Fragment>
@@ -577,9 +655,7 @@ export default function TeamRosterPage() {
 
           {filtered.length === 0 && (
             <div className="text-center py-8 text-slate-400 text-sm">
-              {groups.length === 0
-                ? 'No team data yet. Import a spreadsheet or add resources manually.'
-                : 'No matches for the current filters.'}
+              {groups.length === 0 ? 'No team data yet. Import a spreadsheet or add resources manually.' : 'No matches for the current filters.'}
             </div>
           )}
         </div>

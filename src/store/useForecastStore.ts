@@ -1,6 +1,21 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { ForecastAssignment, Month } from '../types/forecast';
+import { MONTHS } from '../types/forecast';
+
+/** Given a weeklyHours map, recompute monthlyTotals. */
+function recalcMonthlyFromWeekly(weeklyHours: Record<string, number>): Record<Month, number> {
+  const totals: Record<string, number> = {};
+  for (const m of MONTHS) totals[m] = 0;
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  for (const [dateStr, hrs] of Object.entries(weeklyHours)) {
+    if (!hrs) continue;
+    const d = new Date(dateStr + 'T00:00:00');
+    const monthIdx = d.getMonth();
+    totals[monthNames[monthIdx]] += hrs;
+  }
+  return totals as Record<Month, number>;
+}
 
 interface ForecastState {
   assignments: ForecastAssignment[];
@@ -24,6 +39,9 @@ interface ForecastState {
 
   /** Update a specific month's hours for an employee×project pair. */
   updateMonthlyHours: (employeeName: string, project: string, month: Month, hours: number) => void;
+
+  /** Update weekly hours for an employee×project and recalculate monthly totals. */
+  updateWeeklyHours: (employeeName: string, project: string, weekDate: string, hours: number) => void;
 
   /** Rename an employee across all their assignment rows. */
   renameEmployee: (oldName: string, newName: string) => void;
@@ -72,6 +90,17 @@ export const useForecastStore = create<ForecastState>()(
           assignments: s.assignments.map((a) => {
             if (a.employeeName === employeeName && a.project === project) {
               return { ...a, monthlyTotals: { ...a.monthlyTotals, [month]: hours } };
+            }
+            return a;
+          }),
+        })),
+
+      updateWeeklyHours: (employeeName, project, weekDate, hours) =>
+        set((s) => ({
+          assignments: s.assignments.map((a) => {
+            if (a.employeeName === employeeName && a.project === project) {
+              const newWeekly = { ...a.weeklyHours, [weekDate]: hours };
+              return { ...a, weeklyHours: newWeekly, monthlyTotals: recalcMonthlyFromWeekly(newWeekly) };
             }
             return a;
           }),
