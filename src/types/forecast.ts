@@ -83,6 +83,10 @@ export interface ZohoPipelineProject {
   zohoId?: string;
   /** Short name used in the forecast spreadsheet (for matching). */
   forecastName?: string;
+  /** Go-Live date — auto-detected from phases or manually set. */
+  goLiveDate?: string | null;
+  /** Project revenue (manually entered). */
+  revenue?: number | null;
   /** Estimated resource needs (for forecast) */
   resources: PipelineResource[];
   /** Phases/milestones from Zoho */

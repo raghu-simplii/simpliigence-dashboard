@@ -1,11 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useForecastStore, usePipelineStore } from '../store';
 import { PageHeader } from '../components/shared/PageHeader';
 import { Card, Badge } from '../components/ui';
 import { deriveProjectSummaries } from '../lib/parseSpreadsheet';
 import { MONTHS } from '../types/forecast';
 import type { ZohoPipelineProject, ZohoPhase } from '../types/forecast';
-import { ChevronDown, ChevronRight, RefreshCw, Users, Calendar, Clock } from 'lucide-react';
+import { ChevronDown, ChevronRight, RefreshCw, Users, Calendar, Clock, Rocket, DollarSign, TrendingUp } from 'lucide-react';
 
 /* ── Status badge helper ──────────────────────────────── */
 function projectStatusVariant(status: string) {
@@ -34,6 +34,41 @@ function formatDate(d: string | null) {
 
 function daysBetween(a: string, b: string) {
   return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86_400_000);
+}
+
+/** Detect Go-Live date from phases (looks for phase names containing "go-live", "go live", "golive") */
+function detectGoLiveDate(phases: ZohoPhase[]): string | null {
+  const goLivePhase = phases.find((p) =>
+    /go[\s\-_]*live/i.test(p.name)
+  );
+  return goLivePhase?.startDate ?? null;
+}
+
+/** Get go-live date: manual override > phase detection > null */
+function getGoLiveDate(project: ZohoPipelineProject): string | null {
+  if (project.goLiveDate) return project.goLiveDate;
+  return detectGoLiveDate(project.phases ?? []);
+}
+
+/** Days until go-live from today */
+function daysUntilGoLive(goLiveDate: string): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(goLiveDate + 'T00:00:00');
+  return Math.ceil((target.getTime() - today.getTime()) / 86_400_000);
+}
+
+/** Go-Live urgency badge */
+function GoLiveBadge({ date }: { date: string }) {
+  const days = daysUntilGoLive(date);
+  let variant: 'danger' | 'warning' | 'info' | 'success' | 'neutral' = 'info';
+  let label = '';
+  if (days < 0) { variant = 'neutral'; label = `${Math.abs(days)}d ago`; }
+  else if (days === 0) { variant = 'danger'; label = 'TODAY'; }
+  else if (days <= 7) { variant = 'danger'; label = `${days}d away`; }
+  else if (days <= 30) { variant = 'warning'; label = `${days}d away`; }
+  else { variant = 'info'; label = `${days}d away`; }
+  return <Badge variant={variant}>{label}</Badge>;
 }
 
 /* ── Phase timeline bar ──────────────────────────────── */
@@ -89,10 +124,46 @@ function PhaseTimeline({ phases, projectStart, projectEnd }: { phases: ZohoPhase
   );
 }
 
+/* ── Inline editable field ───────────────────────── */
+function InlineEdit({ value, onSave, type = 'text', prefix = '', placeholder = 'Click to set', className = '' }: {
+  value: string | number | null | undefined;
+  onSave: (v: string) => void;
+  type?: 'text' | 'number' | 'date';
+  prefix?: string;
+  placeholder?: string;
+  className?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value ?? ''));
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (editing) { ref.current?.focus(); ref.current?.select(); } }, [editing]);
+  const commit = () => { onSave(draft.trim()); setEditing(false); };
+  if (editing) {
+    return (
+      <input
+        ref={ref}
+        type={type}
+        className={`rounded border border-primary/40 bg-white px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50 ${className}`}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false); }}
+      />
+    );
+  }
+  return (
+    <span onClick={(e) => { e.stopPropagation(); setEditing(true); setDraft(String(value ?? '')); }} className="cursor-pointer hover:text-primary">
+      {value ? `${prefix}${value}` : <span className="text-slate-400 italic">{placeholder}</span>}
+    </span>
+  );
+}
+
 /* ── Project card ──────────────────────────────── */
-function ZohoProjectCard({ project, teamAllocation }: {
+function ZohoProjectCard({ project, teamAllocation, loadedCost, onUpdateProject }: {
   project: ZohoPipelineProject;
   teamAllocation: { name: string; role: string; totalHours: number; rateCard: number | null }[] | undefined;
+  loadedCost: number;
+  onUpdateProject: (id: string, updates: Partial<ZohoPipelineProject>) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const phases = useMemo(
@@ -101,6 +172,10 @@ function ZohoProjectCard({ project, teamAllocation }: {
   );
   const completedPhases = phases.filter((p) => p.isClosed).length;
   const currentPhase = phases.find((p) => !p.isClosed);
+  const goLiveDate = getGoLiveDate(project);
+  const revenue = project.revenue ?? 0;
+  const margin = revenue - loadedCost;
+  const marginPct = revenue > 0 ? Math.round((margin / revenue) * 100) : 0;
 
   return (
     <Card>
@@ -125,6 +200,34 @@ function ZohoProjectCard({ project, teamAllocation }: {
               <span className="text-blue-600 font-medium">Current: {currentPhase.name}</span>
             )}
           </div>
+
+          {/* Go-Live date - prominent */}
+          {goLiveDate && (
+            <div className="flex items-center gap-2 mt-2 ml-6">
+              <span className="flex items-center gap-1.5 text-sm font-semibold text-orange-700 bg-orange-50 border border-orange-200 rounded-lg px-3 py-1">
+                <Rocket size={14} />
+                Go-Live: {formatDate(goLiveDate)}
+              </span>
+              <GoLiveBadge date={goLiveDate} />
+            </div>
+          )}
+
+          {/* Revenue & Margin summary */}
+          {(revenue > 0 || loadedCost > 0) && (
+            <div className="flex items-center gap-4 mt-2 ml-6 text-xs">
+              {revenue > 0 && (
+                <span className="flex items-center gap-1 text-emerald-700"><DollarSign size={12} /> Revenue: ${revenue.toLocaleString()}</span>
+              )}
+              {loadedCost > 0 && (
+                <span className="flex items-center gap-1 text-slate-600"><TrendingUp size={12} /> Cost: ${Math.round(loadedCost).toLocaleString()}</span>
+              )}
+              {revenue > 0 && loadedCost > 0 && (
+                <span className={`font-semibold ${margin >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                  Margin: ${Math.round(margin).toLocaleString()} ({marginPct}%)
+                </span>
+              )}
+            </div>
+          )}
         </div>
         {/* mini progress */}
         {phases.length > 0 && (
@@ -204,6 +307,48 @@ function ZohoProjectCard({ project, teamAllocation }: {
             </div>
           )}
 
+          {/* Editable fields: Go-Live Date & Revenue */}
+          <div className="flex flex-wrap gap-6 items-center">
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Go-Live Date</label>
+              <InlineEdit
+                value={project.goLiveDate ?? (goLiveDate || '')}
+                type="date"
+                placeholder="Set go-live date"
+                onSave={(v) => onUpdateProject(project.id, { goLiveDate: v || null })}
+                className="w-36"
+              />
+              {!project.goLiveDate && goLiveDate && (
+                <span className="text-[10px] text-slate-400 block mt-0.5">Auto-detected from phases</span>
+              )}
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Project Revenue (USD)</label>
+              <InlineEdit
+                value={project.revenue ?? ''}
+                type="number"
+                prefix="$"
+                placeholder="Set revenue"
+                onSave={(v) => onUpdateProject(project.id, { revenue: parseFloat(v) > 0 ? parseFloat(v) : null })}
+                className="w-32"
+              />
+            </div>
+            {loadedCost > 0 && (
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Loaded Cost</label>
+                <span className="text-sm font-medium text-slate-700">${Math.round(loadedCost).toLocaleString()}</span>
+              </div>
+            )}
+            {revenue > 0 && loadedCost > 0 && (
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Margin</label>
+                <span className={`text-sm font-bold ${margin >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                  ${Math.round(margin).toLocaleString()} ({marginPct}%)
+                </span>
+              </div>
+            )}
+          </div>
+
           {(!teamAllocation || teamAllocation.length === 0) && phases.length === 0 && (
             <p className="text-sm text-slate-400 italic">No phases or team allocations yet.</p>
           )}
@@ -217,6 +362,7 @@ function ZohoProjectCard({ project, teamAllocation }: {
 export default function ProjectPipelinePage() {
   const assignments = useForecastStore((s) => s.assignments);
   const zohoProjects = usePipelineStore((s) => s.projects);
+  const updateProject = usePipelineStore((s) => s.updateProject);
   const lastSync = usePipelineStore((s) => s.lastZohoSync);
 
   // Derive team allocation per project from forecast store
@@ -285,13 +431,18 @@ export default function ProjectPipelinePage() {
       {/* Zoho projects */}
       <h2 className="text-lg font-semibold text-slate-800 mb-3">Zoho Projects</h2>
       <div className="grid grid-cols-1 gap-3 mb-8">
-        {zohoProjects.map((project) => (
-          <ZohoProjectCard
-            key={project.id}
-            project={project}
-            teamAllocation={(teamByProject.get((project.forecastName ?? project.name).toLowerCase()) ?? teamByProject.get(project.name.toLowerCase()))?.employees}
-          />
-        ))}
+        {zohoProjects.map((project) => {
+          const ps = teamByProject.get((project.forecastName ?? project.name).toLowerCase()) ?? teamByProject.get(project.name.toLowerCase());
+          return (
+            <ZohoProjectCard
+              key={project.id}
+              project={project}
+              teamAllocation={ps?.employees}
+              loadedCost={ps?.loadedCost ?? 0}
+              onUpdateProject={updateProject}
+            />
+          );
+        })}
       </div>
 
       {/* Forecast-only projects (from Team tab, not in Zoho) */}

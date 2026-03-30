@@ -650,6 +650,42 @@ export default function TeamRosterPage() {
                   </Fragment>
                 );
               })}
+              {/* ── Totals row ─────────────────────── */}
+              {filtered.length > 0 && (() => {
+                const grandWeekly: Record<string, number> = {};
+                for (const w of weekDates) grandWeekly[w] = 0;
+                let grandMonth = 0;
+                let grandYear = 0;
+                for (const g of filtered) {
+                  for (const a of g.assignments) {
+                    const wk = getWeeklyHoursForAssignment(a, weekDates);
+                    for (const w of weekDates) grandWeekly[w] += wk[w] ?? 0;
+                  }
+                  grandMonth += g.assignments.reduce((s, a) => s + (a.monthlyTotals[selectedMonth] ?? 0), 0);
+                  grandYear += g.totalHours;
+                }
+                return (
+                  <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold">
+                    <td />
+                    <td className="py-2.5 pr-3 text-slate-700">Total ({filtered.length})</td>
+                    <td /><td /><td /><td />
+                    {weekDates.map((w) => (
+                      <td key={w} className="py-2.5 pr-1 text-center tabular-nums">
+                        <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-bold ${grandWeekly[w] > 0 ? 'text-slate-800 bg-slate-200' : 'text-slate-300'}`}>
+                          {grandWeekly[w] > 0 ? grandWeekly[w] : '—'}
+                        </span>
+                      </td>
+                    ))}
+                    <td className="py-2.5 text-right">
+                      <span className="inline-block px-1.5 py-0.5 rounded text-xs font-bold text-slate-800 bg-slate-200">{grandMonth > 0 ? grandMonth.toLocaleString() : '—'}</span>
+                    </td>
+                    <td className="py-2.5 text-right">
+                      <span className="inline-block px-1.5 py-0.5 rounded text-xs font-bold text-slate-800 bg-slate-200">{grandYear > 0 ? grandYear.toLocaleString() : '—'}</span>
+                    </td>
+                    <td />
+                  </tr>
+                );
+              })()}
             </tbody>
           </table>
 
