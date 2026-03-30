@@ -72,7 +72,14 @@ export const usePipelineStore = create<PipelineState>()(
     {
       name: 'simpliigence-pipeline',
       version: 2,
-      migrate: () => ({ projects: [], lastZohoSync: null }),
+      migrate: (persisted: unknown) => {
+        // Preserve existing data; just let the seed function patch forecastName
+        const old = persisted as Record<string, unknown> | null;
+        return {
+          projects: (old?.projects as ZohoPipelineProject[]) ?? [],
+          lastZohoSync: (old?.lastZohoSync as string) ?? null,
+        };
+      },
     },
   ),
 );

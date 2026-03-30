@@ -62,15 +62,47 @@ export const useForecastStore = create<ForecastState>()(
       assignments: [],
       weekDates: [],
 
-      setData: (assignments, weekDates) => set({ assignments, weekDates }),
+      setData: (incoming, weekDates) =>
+        set((s) => {
+          // Preserve manually-edited and manually-added assignments during sync.
+          // Manual edits take priority over spreadsheet data for matching rows.
+          const manualAdded = s.assignments.filter((a) => a._manuallyAdded);
+          const manualEdited = new Map<string, ForecastAssignment>();
+          for (const a of s.assignments) {
+            if (a._manuallyEdited) {
+              // Use the original key if available (handles renames), else current key
+              const key = a._originalKey || `${a.employeeName}|||${a.project}`;
+              manualEdited.set(key.toLowerCase(), a);
+            }
+          }
+
+          // Merge: for each incoming row, use the manual edit if it exists
+          const merged = incoming.map((row) => {
+            const key = `${row.employeeName}|||${row.project}`.toLowerCase();
+            const override = manualEdited.get(key);
+            if (override) {
+              manualEdited.delete(key); // consumed
+              return override;
+            }
+            return row;
+          });
+
+          // Append any manual edits that didn't match (renamed rows) + manually added rows
+          const leftoverEdits = Array.from(manualEdited.values());
+          const finalAssignments = [...merged, ...leftoverEdits, ...manualAdded];
+
+          return { assignments: finalAssignments, weekDates };
+        }),
       clear: () => set({ assignments: [], weekDates: [] }),
 
       addAssignment: (a) =>
-        set((s) => ({ assignments: [...s.assignments, a] })),
+        set((s) => ({ assignments: [...s.assignments, { ...a, _manuallyAdded: true }] })),
 
       updateAssignment: (index, updates) =>
         set((s) => ({
-          assignments: s.assignments.map((a, i) => (i === index ? { ...a, ...updates } : a)),
+          assignments: s.assignments.map((a, i) =>
+            i === index ? { ...a, ...updates, _manuallyEdited: true, _originalKey: a._originalKey || `${a.employeeName}|||${a.project}` } : a,
+          ),
         })),
 
       removeAssignment: (index) =>
@@ -89,7 +121,7 @@ export const useForecastStore = create<ForecastState>()(
         set((s) => ({
           assignments: s.assignments.map((a) => {
             if (a.employeeName === employeeName && a.project === project) {
-              return { ...a, monthlyTotals: { ...a.monthlyTotals, [month]: hours } };
+              return { ...a, monthlyTotals: { ...a.monthlyTotals, [month]: hours }, _manuallyEdited: true, _originalKey: a._originalKey || `${a.employeeName}|||${a.project}` };
             }
             return a;
           }),
@@ -100,7 +132,7 @@ export const useForecastStore = create<ForecastState>()(
           assignments: s.assignments.map((a) => {
             if (a.employeeName === employeeName && a.project === project) {
               const newWeekly = { ...a.weeklyHours, [weekDate]: hours };
-              return { ...a, weeklyHours: newWeekly, monthlyTotals: recalcMonthlyFromWeekly(newWeekly) };
+              return { ...a, weeklyHours: newWeekly, monthlyTotals: recalcMonthlyFromWeekly(newWeekly), _manuallyEdited: true, _originalKey: a._originalKey || `${a.employeeName}|||${a.project}` };
             }
             return a;
           }),
@@ -109,28 +141,36 @@ export const useForecastStore = create<ForecastState>()(
       renameEmployee: (oldName, newName) =>
         set((s) => ({
           assignments: s.assignments.map((a) =>
-            a.employeeName === oldName ? { ...a, employeeName: newName } : a,
+            a.employeeName === oldName
+              ? { ...a, employeeName: newName, _manuallyEdited: true, _originalKey: a._originalKey || `${oldName}|||${a.project}` }
+              : a,
           ),
         })),
 
       updateEmployeeRole: (employeeName, role) =>
         set((s) => ({
           assignments: s.assignments.map((a) =>
-            a.employeeName === employeeName ? { ...a, role } : a,
+            a.employeeName === employeeName
+              ? { ...a, role, _manuallyEdited: true, _originalKey: a._originalKey || `${a.employeeName}|||${a.project}` }
+              : a,
           ),
         })),
 
       updateEmployeeRate: (employeeName, rate) =>
         set((s) => ({
           assignments: s.assignments.map((a) =>
-            a.employeeName === employeeName ? { ...a, rateCard: rate } : a,
+            a.employeeName === employeeName
+              ? { ...a, rateCard: rate, _manuallyEdited: true, _originalKey: a._originalKey || `${a.employeeName}|||${a.project}` }
+              : a,
           ),
         })),
 
       updateEmployeeType: (employeeName, isSI, isContractor) =>
         set((s) => ({
           assignments: s.assignments.map((a) =>
-            a.employeeName === employeeName ? { ...a, isSI, isContractor } : a,
+            a.employeeName === employeeName
+              ? { ...a, isSI, isContractor, _manuallyEdited: true, _originalKey: a._originalKey || `${a.employeeName}|||${a.project}` }
+              : a,
           ),
         })),
     }),

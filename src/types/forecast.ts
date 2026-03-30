@@ -21,6 +21,12 @@ export interface ForecastAssignment {
   weeklyHours: Record<string, number>;
   /** Monthly total hours keyed by month name */
   monthlyTotals: Record<Month, number>;
+  /** True when user has edited this row in the UI (survives spreadsheet re-sync). */
+  _manuallyEdited?: boolean;
+  /** True when user added this row manually (not from spreadsheet). */
+  _manuallyAdded?: boolean;
+  /** Original employee+project key before any renames, used to match during sync. */
+  _originalKey?: string;
 }
 
 /** Aggregated view of one employee across all their projects. */
