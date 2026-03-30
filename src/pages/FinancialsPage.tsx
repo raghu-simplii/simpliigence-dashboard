@@ -17,52 +17,52 @@ export default function FinancialsPage() {
   const employees = useMemo(() => deriveEmployeeSummaries(assignments), [assignments]);
   const projects = useMemo(() => deriveProjectSummaries(assignments), [assignments]);
 
-  const totalRevenue = projects.reduce((s, p) => s + p.estimatedRevenue, 0);
-  const totalRevenueINR = totalRevenue * exchangeRate;
+  const totalCost = projects.reduce((s, p) => s + p.loadedCost, 0);
+  const totalCostINR = totalCost * exchangeRate;
 
-  // Revenue by month
-  const monthlyRevenue = useMemo(() => {
+  // Loaded cost by month
+  const monthlyCost = useMemo(() => {
     return MONTHS.map((m) => {
-      let revenue = 0;
+      let cost = 0;
       for (const a of assignments) {
         if (a.rateCard && a.monthlyTotals[m] > 0) {
-          revenue += a.monthlyTotals[m] * a.rateCard;
+          cost += a.monthlyTotals[m] * a.rateCard;
         }
       }
-      return { month: m, revenue: Math.round(revenue), revenueINR: Math.round(revenue * exchangeRate) };
+      return { month: m, cost: Math.round(cost), costINR: Math.round(cost * exchangeRate) };
     });
   }, [assignments, exchangeRate]);
 
-  // Revenue by project
-  const projectRevenue = useMemo(() =>
+  // Loaded cost by project
+  const projectCost = useMemo(() =>
     projects
-      .filter((p) => p.estimatedRevenue > 0)
+      .filter((p) => p.loadedCost > 0)
       .map((p) => ({
         name: p.name,
-        revenue: Math.round(p.estimatedRevenue),
+        cost: Math.round(p.loadedCost),
         hours: p.totalHours,
         headcount: p.employees.length,
-        revenuePerHour: p.totalHours > 0 ? Math.round(p.estimatedRevenue / p.totalHours) : 0,
+        costPerHour: p.totalHours > 0 ? Math.round(p.loadedCost / p.totalHours) : 0,
       })),
     [projects],
   );
 
-  // Employee revenue contribution
-  const employeeRevenue = useMemo(() => {
-    const map = new Map<string, { name: string; role: string; hours: number; revenue: number; rate: number | null }>();
+  // Employee cost contribution
+  const employeeCost = useMemo(() => {
+    const map = new Map<string, { name: string; role: string; hours: number; cost: number; rate: number | null }>();
     for (const a of assignments) {
       const totalHrs = MONTHS.reduce((s, m) => s + a.monthlyTotals[m], 0);
-      const rev = a.rateCard ? totalHrs * a.rateCard : 0;
+      const c = a.rateCard ? totalHrs * a.rateCard : 0;
       const existing = map.get(a.employeeName);
       if (existing) {
         existing.hours += totalHrs;
-        existing.revenue += rev;
+        existing.cost += c;
       } else {
-        map.set(a.employeeName, { name: a.employeeName, role: a.role, hours: totalHrs, revenue: rev, rate: a.rateCard });
+        map.set(a.employeeName, { name: a.employeeName, role: a.role, hours: totalHrs, cost: c, rate: a.rateCard });
       }
     }
     return Array.from(map.values())
-      .sort((a, b) => b.revenue - a.revenue)
+      .sort((a, b) => b.cost - a.cost)
       .slice(0, 15);
   }, [assignments]);
 
@@ -74,37 +74,37 @@ export default function FinancialsPage() {
 
   return (
     <>
-      <PageHeader title="Financials" subtitle="Revenue estimates based on rate cards and forecasted hours" />
+      <PageHeader title="Financials" subtitle="Loaded cost estimates based on rate cards and forecasted hours" />
 
       <div className="grid grid-cols-4 gap-4 mb-6">
-        <StatCard icon={<DollarSign size={24} />} label="Total Revenue (USD)" value={`$${totalRevenue.toLocaleString()}`} />
-        <StatCard icon={<DollarSign size={24} />} label="Total Revenue (INR)" value={`₹${Math.round(totalRevenueINR).toLocaleString()}`} />
+        <StatCard icon={<DollarSign size={24} />} label="Total Loaded Cost (USD)" value={`$${totalCost.toLocaleString()}`} />
+        <StatCard icon={<DollarSign size={24} />} label="Total Loaded Cost (INR)" value={`₹${Math.round(totalCostINR).toLocaleString()}`} />
         <StatCard icon={<TrendingUp size={24} />} label="Billable %" value={`${billablePercent}%`} />
-        <StatCard icon={<TrendingUp size={24} />} label="Avg Rev/Hr" value={totalHours > 0 ? `$${Math.round(totalRevenue / billableHours)}` : '—'} />
+        <StatCard icon={<TrendingUp size={24} />} label="Avg Cost/Hr" value={totalHours > 0 ? `$${Math.round(totalCost / billableHours)}` : '—'} />
       </div>
 
       <div className="grid grid-cols-2 gap-4 mb-6">
-        <Card title="Monthly Revenue (USD)">
+        <Card title="Monthly Loaded Cost (USD)">
           <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={monthlyRevenue}>
+            <BarChart data={monthlyCost}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis dataKey="month" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
               <Tooltip formatter={(v) => `$${Number(v).toLocaleString()}`} />
-              <Bar dataKey="revenue" fill="#10b981" radius={[4, 4, 0, 0]} name="Revenue (USD)" />
+              <Bar dataKey="cost" fill="#10b981" radius={[4, 4, 0, 0]} name="Loaded Cost (USD)" />
             </BarChart>
           </ResponsiveContainer>
         </Card>
 
-        <Card title="Revenue by Project">
+        <Card title="Loaded Cost by Project">
           <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={projectRevenue} layout="vertical">
+            <BarChart data={projectCost} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
               <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 11 }} />
               <Tooltip formatter={(v) => `$${Number(v).toLocaleString()}`} />
-              <Bar dataKey="revenue" name="Revenue" radius={[0, 4, 4, 0]}>
-                {projectRevenue.map((_, i) => (
+              <Bar dataKey="cost" name="Loaded Cost" radius={[0, 4, 4, 0]}>
+                {projectCost.map((_, i) => (
                   <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                 ))}
               </Bar>
@@ -114,45 +114,45 @@ export default function FinancialsPage() {
       </div>
 
       {/* Project financials table */}
-      <Card title="Project Revenue Breakdown" className="mb-6">
+      <Card title="Project Loaded Cost Breakdown" className="mb-6">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left">
               <th className="pb-3 font-semibold text-slate-600">Project</th>
               <th className="pb-3 font-semibold text-slate-600 text-right">Headcount</th>
               <th className="pb-3 font-semibold text-slate-600 text-right">Total Hours</th>
-              <th className="pb-3 font-semibold text-slate-600 text-right">Revenue (USD)</th>
-              <th className="pb-3 font-semibold text-slate-600 text-right">Revenue (INR)</th>
+              <th className="pb-3 font-semibold text-slate-600 text-right">Loaded Cost (USD)</th>
+              <th className="pb-3 font-semibold text-slate-600 text-right">Loaded Cost (INR)</th>
               <th className="pb-3 font-semibold text-slate-600 text-right">Avg $/hr</th>
             </tr>
           </thead>
           <tbody>
-            {projectRevenue.map((p) => (
+            {projectCost.map((p) => (
               <tr key={p.name} className="border-b border-slate-100">
                 <td className="py-2.5 font-medium text-slate-800">{p.name}</td>
                 <td className="py-2.5 text-right tabular-nums">{p.headcount}</td>
                 <td className="py-2.5 text-right tabular-nums">{p.hours.toLocaleString()}</td>
-                <td className="py-2.5 text-right tabular-nums font-semibold text-green-700">${p.revenue.toLocaleString()}</td>
-                <td className="py-2.5 text-right tabular-nums text-slate-600">₹{Math.round(p.revenue * exchangeRate).toLocaleString()}</td>
-                <td className="py-2.5 text-right tabular-nums">${p.revenuePerHour}</td>
+                <td className="py-2.5 text-right tabular-nums font-semibold text-green-700">${p.cost.toLocaleString()}</td>
+                <td className="py-2.5 text-right tabular-nums text-slate-600">₹{Math.round(p.cost * exchangeRate).toLocaleString()}</td>
+                <td className="py-2.5 text-right tabular-nums">${p.costPerHour}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-slate-300 font-bold">
               <td className="pt-3">Total</td>
-              <td className="pt-3 text-right">{projectRevenue.reduce((s, p) => s + p.headcount, 0)}</td>
-              <td className="pt-3 text-right">{projectRevenue.reduce((s, p) => s + p.hours, 0).toLocaleString()}</td>
-              <td className="pt-3 text-right text-green-700">${totalRevenue.toLocaleString()}</td>
-              <td className="pt-3 text-right text-slate-600">₹{Math.round(totalRevenueINR).toLocaleString()}</td>
-              <td className="pt-3 text-right">{billableHours > 0 ? `$${Math.round(totalRevenue / billableHours)}` : '—'}</td>
+              <td className="pt-3 text-right">{projectCost.reduce((s, p) => s + p.headcount, 0)}</td>
+              <td className="pt-3 text-right">{projectCost.reduce((s, p) => s + p.hours, 0).toLocaleString()}</td>
+              <td className="pt-3 text-right text-green-700">${totalCost.toLocaleString()}</td>
+              <td className="pt-3 text-right text-slate-600">₹{Math.round(totalCostINR).toLocaleString()}</td>
+              <td className="pt-3 text-right">{billableHours > 0 ? `$${Math.round(totalCost / billableHours)}` : '—'}</td>
             </tr>
           </tfoot>
         </table>
       </Card>
 
-      {/* Top revenue employees */}
-      <Card title="Top Revenue Contributors">
+      {/* Top cost contributors */}
+      <Card title="Top Cost Contributors">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left">
@@ -160,19 +160,19 @@ export default function FinancialsPage() {
               <th className="pb-3 font-semibold text-slate-600">Role</th>
               <th className="pb-3 font-semibold text-slate-600 text-right">Rate ($/hr)</th>
               <th className="pb-3 font-semibold text-slate-600 text-right">Hours</th>
-              <th className="pb-3 font-semibold text-slate-600 text-right">Revenue (USD)</th>
+              <th className="pb-3 font-semibold text-slate-600 text-right">Loaded Cost (USD)</th>
             </tr>
           </thead>
           <tbody>
-            {employeeRevenue.map((e) => (
+            {employeeCost.map((e) => (
               <tr key={e.name} className="border-b border-slate-100">
                 <td className="py-2.5 font-medium text-slate-800">{e.name}</td>
                 <td className="py-2.5 text-slate-500 text-xs">{e.role || '—'}</td>
                 <td className="py-2.5 text-right tabular-nums">{e.rate ? `$${e.rate}` : '—'}</td>
                 <td className="py-2.5 text-right tabular-nums">{e.hours.toLocaleString()}</td>
                 <td className="py-2.5 text-right tabular-nums font-semibold">
-                  {e.revenue > 0 ? (
-                    <span className="text-green-700">${e.revenue.toLocaleString()}</span>
+                  {e.cost > 0 ? (
+                    <span className="text-green-700">${e.cost.toLocaleString()}</span>
                   ) : (
                     <Badge variant="neutral">No rate</Badge>
                   )}

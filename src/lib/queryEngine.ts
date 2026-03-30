@@ -1,6 +1,6 @@
 /**
  * Smart Query Engine — parses natural-language questions about team capacity,
- * utilization, hiring needs, project allocation, and revenue, then computes
+ * utilization, hiring needs, project allocation, and loaded cost, then computes
  * answers from the forecast store data. Runs entirely client-side.
  */
 import type { ForecastAssignment, Month, EmployeeSummary, ProjectSummary } from '../types/forecast';
@@ -112,7 +112,7 @@ type Intent =
   | 'hiring'
   | 'project_team'
   | 'project_hours'
-  | 'revenue'
+  | 'loaded_cost'
   | 'top_employees'
   | 'employee_info'
   | 'summary'
@@ -127,7 +127,7 @@ function detectIntent(query: string): Intent {
   if (/(hire|hiring|recruit|need.*more|short(age)?|gap|staffing)/.test(q)) return 'hiring';
   if (/who.*(work|assign|allocat).*(on|to|for)/.test(q)) return 'project_team';
   if (/(project|which project|most hours|biggest).*(hour|time|effort)/.test(q)) return 'project_hours';
-  if (/(revenue|earn|billing|cost|money|dollar)/.test(q)) return 'revenue';
+  if (/(revenue|earn|billing|cost|money|dollar)/.test(q)) return 'loaded_cost';
   if (/(top|best|highest|most).*(employee|person|people|resource)/.test(q)) return 'top_employees';
   if (/(tell me about|info on|details|profile)/.test(q)) return 'employee_info';
   if (/(summary|overview|snapshot|status|how are we)/.test(q)) return 'summary';
@@ -179,8 +179,8 @@ export function runQuery(
       return handleProjectTeam(query, projects, employees);
     case 'project_hours':
       return handleProjectHours(projects, targetMonths, periodLabel);
-    case 'revenue':
-      return handleRevenue(projects, targetMonths, periodLabel);
+    case 'loaded_cost':
+      return handleLoadedCost(projects, targetMonths, periodLabel);
     case 'top_employees':
       return handleTopEmployees(employees, targetMonths, periodLabel);
     case 'summary':
@@ -388,12 +388,12 @@ function handleProjectTeam(
       Project: p.name,
       'Team Size': p.employees.length,
       'Total Hours': p.totalHours,
-      'Est. Revenue': '$' + Math.round(p.estimatedRevenue).toLocaleString(),
+      'Loaded Cost': '$' + Math.round(p.loadedCost).toLocaleString(),
     }));
     return {
       answer: `Here are all **${projects.length} projects** and their team allocation:`,
       data: data as Array<Record<string, string | number>>,
-      columns: ['Project', 'Team Size', 'Total Hours', 'Est. Revenue'],
+      columns: ['Project', 'Team Size', 'Total Hours', 'Loaded Cost'],
     };
   }
 
@@ -408,7 +408,7 @@ function handleProjectTeam(
   }));
 
   return {
-    answer: `**${proj.name}** has **${proj.employees.length} team members** allocated, totaling **${formatHours(proj.totalHours)} hours** (est. revenue: $${Math.round(proj.estimatedRevenue).toLocaleString()}):`,
+    answer: `**${proj.name}** has **${proj.employees.length} team members** allocated, totaling **${formatHours(proj.totalHours)} hours** (loaded cost: $${Math.round(proj.loadedCost).toLocaleString()}):`,
     data: data as Array<Record<string, string | number>>,
     columns: ['Name', 'Role', 'Total Hours', 'Rate'],
   };
@@ -422,7 +422,7 @@ function handleProjectHours(
   const results = projects
     .map((p) => {
       const hours = months.reduce((s, m) => s + p.monthlyHours[m], 0);
-      return { name: p.name, hours, team: p.employees.length, revenue: p.estimatedRevenue };
+      return { name: p.name, hours, team: p.employees.length, cost: p.loadedCost };
     })
     .sort((a, b) => b.hours - a.hours);
 
@@ -430,35 +430,35 @@ function handleProjectHours(
     Project: r.name,
     [`Hours (${periodLabel})`]: r.hours,
     'Team Size': r.team,
-    'Est. Revenue': '$' + Math.round(r.revenue).toLocaleString(),
+    'Loaded Cost': '$' + Math.round(r.cost).toLocaleString(),
   }));
 
   return {
     answer: `**Project hours for ${periodLabel}**:\n\nBiggest project: **${results[0]?.name}** with ${formatHours(results[0]?.hours || 0)} hours.`,
     data: data as Array<Record<string, string | number>>,
-    columns: ['Project', `Hours (${periodLabel})`, 'Team Size', 'Est. Revenue'],
+    columns: ['Project', `Hours (${periodLabel})`, 'Team Size', 'Loaded Cost'],
   };
 }
 
-function handleRevenue(
+function handleLoadedCost(
   projects: ProjectSummary[],
   _months: Month[],
   _periodLabel: string,
 ): QueryResult {
-  const sorted = [...projects].sort((a, b) => b.estimatedRevenue - a.estimatedRevenue);
-  const totalRev = sorted.reduce((s, p) => s + p.estimatedRevenue, 0);
+  const sorted = [...projects].sort((a, b) => b.loadedCost - a.loadedCost);
+  const totalRev = sorted.reduce((s, p) => s + p.loadedCost, 0);
 
   const data = sorted.map((p) => ({
     Project: p.name,
-    'Est. Revenue': '$' + Math.round(p.estimatedRevenue).toLocaleString(),
+    'Loaded Cost': '$' + Math.round(p.loadedCost).toLocaleString(),
     'Total Hours': p.totalHours,
     'Team Size': p.employees.length,
   }));
 
   return {
-    answer: `**Total estimated revenue: $${Math.round(totalRev).toLocaleString()}**\n\nTop earner: **${sorted[0]?.name}** at $${Math.round(sorted[0]?.estimatedRevenue || 0).toLocaleString()}.`,
+    answer: `**Total loaded cost: $${Math.round(totalRev).toLocaleString()}**\n\nHighest cost: **${sorted[0]?.name}** at $${Math.round(sorted[0]?.loadedCost || 0).toLocaleString()}.`,
     data: data as Array<Record<string, string | number>>,
-    columns: ['Project', 'Est. Revenue', 'Total Hours', 'Team Size'],
+    columns: ['Project', 'Loaded Cost', 'Total Hours', 'Team Size'],
   };
 }
 
@@ -496,7 +496,7 @@ function handleSummary(
   const totalHours = employees.reduce((s, e) => s + hoursInMonths(e, months), 0);
   const totalCapacity = employees.length * cap;
   const avgUtil = utilizationPct(totalHours, totalCapacity);
-  const totalRev = projects.reduce((s, p) => s + p.estimatedRevenue, 0);
+  const totalRev = projects.reduce((s, p) => s + p.loadedCost, 0);
   const overloaded = employees.filter((e) => utilizationPct(hoursInMonths(e, months), cap) > 90).length;
   const underutil = employees.filter((e) => utilizationPct(hoursInMonths(e, months), cap) < 50).length;
 
@@ -507,7 +507,7 @@ function handleSummary(
       `- Average utilization: **${avgUtil}%**\n` +
       `- Stretched (>90%): **${overloaded}** people\n` +
       `- Underutilized (<50%): **${underutil}** people\n` +
-      `- Estimated revenue: **$${Math.round(totalRev).toLocaleString()}**`,
+      `- Loaded cost: **$${Math.round(totalRev).toLocaleString()}**`,
   };
 }
 
@@ -549,7 +549,7 @@ function handleFallback(_employees: EmployeeSummary[], _projects: ProjectSummary
       `- **Overloaded**: "Who is overloaded in April?"\n` +
       `- **Hiring**: "How many developers should we hire in Q2?"\n` +
       `- **Projects**: "Who is working on CoolAir?"\n` +
-      `- **Revenue**: "Estimated revenue for Q2"\n` +
+      `- **Loaded Cost**: "Loaded cost for Q2"\n` +
       `- **People**: "Tell me about Anupama"\n` +
       `- **Summary**: "Give me a summary for March"`,
   };
@@ -564,6 +564,6 @@ export const SUGGESTED_QUERIES = [
   'Show utilization for Q2',
   'Who is working on CoolAir?',
   'Which project has the most hours?',
-  'Estimated revenue for Q2',
+  'Loaded cost for Q2',
   'Give me a team summary for March',
 ];

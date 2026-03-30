@@ -306,7 +306,7 @@ export default function ProjectPipelinePage() {
                     <h3 className="font-semibold text-slate-800 text-base">{p.name}</h3>
                     <p className="text-sm text-slate-500 mt-0.5">
                       {p.employees.length} team members · {p.totalHours.toLocaleString()} total hours
-                      {p.estimatedRevenue > 0 && <> · <span className="text-green-600">${p.estimatedRevenue.toLocaleString()} est. revenue</span></>}
+                      {p.loadedCost > 0 && <> · <span className="text-green-600">${p.loadedCost.toLocaleString()} loaded cost</span></>}
                     </p>
                   </div>
                   <div className="flex gap-2">

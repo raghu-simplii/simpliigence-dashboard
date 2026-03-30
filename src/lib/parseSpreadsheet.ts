@@ -256,15 +256,15 @@ export function deriveProjectSummaries(assignments: ForecastAssignment[]): Proje
     const employees = Array.from(employeeMap.values()).sort((a, b) => b.totalHours - a.totalHours);
     const totalHours = MONTHS.reduce((s, m) => s + monthlyHours[m], 0);
 
-    let estimatedRevenue = 0;
+    let loadedCost = 0;
     for (const row of rows) {
       if (row.rateCard) {
         const hrs = MONTHS.reduce((s, m) => s + row.monthlyTotals[m], 0);
-        estimatedRevenue += hrs * row.rateCard;
+        loadedCost += hrs * row.rateCard;
       }
     }
 
-    result.push({ name: projectName, employees, monthlyHours, totalHours, estimatedRevenue });
+    result.push({ name: projectName, employees, monthlyHours, totalHours, loadedCost });
   }
 
   return result.sort((a, b) => b.totalHours - a.totalHours);

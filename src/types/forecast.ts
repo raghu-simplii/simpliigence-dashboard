@@ -43,7 +43,7 @@ export interface ProjectSummary {
   employees: { name: string; role: string; totalHours: number; rateCard: number | null }[];
   monthlyHours: Record<Month, number>;
   totalHours: number;
-  estimatedRevenue: number; // sum of employee hours × rate
+  loadedCost: number; // sum of employee hours × rate card
 }
 
 /** Weekly date column parsed from the header. */

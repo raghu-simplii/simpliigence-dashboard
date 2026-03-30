@@ -155,7 +155,7 @@ export default function DashboardPage() {
   const totalEmployees = employees.length;
   const totalProjects = projects.length;
   const totalHours = employees.reduce((s, e) => s + e.totalHours, 0);
-  const totalRevenue = projects.reduce((s, p) => s + p.estimatedRevenue, 0);
+  const totalCost = projects.reduce((s, p) => s + p.loadedCost, 0);
 
   // Monthly hours trend
   const monthlyTrend = useMemo(() =>
@@ -204,7 +204,7 @@ export default function DashboardPage() {
         <StatCard icon={<Users size={24} />} label="Team Size" value={totalEmployees} />
         <StatCard icon={<FolderKanban size={24} />} label="Active Projects" value={totalProjects} />
         <StatCard icon={<Clock size={24} />} label="Total Forecasted Hours" value={totalHours.toLocaleString()} />
-        <StatCard icon={<DollarSign size={24} />} label="Est. Revenue (USD)" value={`$${Math.round(totalRevenue).toLocaleString()}`} />
+        <StatCard icon={<DollarSign size={24} />} label="Loaded Cost (USD)" value={`$${Math.round(totalCost).toLocaleString()}`} />
       </div>
 
       <div className="grid grid-cols-2 gap-4 mb-6">
