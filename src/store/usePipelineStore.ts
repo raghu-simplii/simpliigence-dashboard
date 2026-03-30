@@ -1,19 +1,19 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { PipelineProject, PipelineResource } from '../types/forecast';
+import type { ZohoPipelineProject, PipelineResource } from '../types/forecast';
 
 interface PipelineState {
-  projects: PipelineProject[];
+  projects: ZohoPipelineProject[];
   lastZohoSync: string | null;
 
   /** Replace all Zoho-sourced projects (preserves manual ones). */
-  setZohoProjects: (projects: PipelineProject[]) => void;
+  setZohoProjects: (projects: ZohoPipelineProject[]) => void;
 
   /** Add a manually-created pipeline project. */
-  addProject: (project: PipelineProject) => void;
+  addProject: (project: ZohoPipelineProject) => void;
 
   /** Update an existing project. */
-  updateProject: (id: string, updates: Partial<PipelineProject>) => void;
+  updateProject: (id: string, updates: Partial<ZohoPipelineProject>) => void;
 
   /** Remove a project. */
   removeProject: (id: string) => void;

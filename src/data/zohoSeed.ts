@@ -1,10 +1,10 @@
-import type { PipelineProject } from '../types/forecast';
+import type { ZohoPipelineProject } from '../types/forecast';
 
 /**
  * Zoho Projects data synced on 2026-03-30.
  * Active/In-Progress projects only (excludes Completed and On Hold).
  */
-export const ZOHO_SEED_PROJECTS: PipelineProject[] = [
+export const ZOHO_SEED_PROJECTS: ZohoPipelineProject[] = [
   {
     id: 'zoho-204610000003189029',
     name: 'Checker Flag Leasing',

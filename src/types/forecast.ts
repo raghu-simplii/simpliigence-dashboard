@@ -54,7 +54,7 @@ export interface WeekColumn {
 }
 
 /** A project from Zoho Projects (or manually added) for the pipeline/forecast. */
-export interface PipelineProject {
+export interface ZohoPipelineProject {
   id: string;
   name: string;
   status: string; // e.g. "In Progress", "On Track", "Delayed", "Completed"
