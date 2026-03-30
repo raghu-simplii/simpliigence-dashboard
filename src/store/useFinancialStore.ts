@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { FinancialSettings } from '../types';
+import { db } from '../lib/supabaseSync';
 
 const DEFAULT_EXCHANGE_RATE = 83.5; // INR per 1 USD
 const DEFAULT_CAD_TO_USD = 0.73;    // USD per 1 CAD
@@ -12,16 +13,18 @@ interface FinancialState {
 
 export const useFinancialStore = create<FinancialState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       settings: {
         exchangeRate: DEFAULT_EXCHANGE_RATE,
         cadToUsdRate: DEFAULT_CAD_TO_USD,
         displayCurrency: 'inr',
       },
-      updateSettings: (updates) =>
+      updateSettings: (updates) => {
         set((state) => ({
           settings: { ...state.settings, ...updates },
-        })),
+        }));
+        db.saveFinancialSettings(get().settings);
+      },
     }),
     {
       name: 'simpliigence-financial',

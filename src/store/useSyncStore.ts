@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { db } from '../lib/supabaseSync';
 
 interface SyncState {
   // Configuration
@@ -14,7 +15,7 @@ interface SyncState {
   lastSyncRowCount: number;
   lastSyncMemberCount: number;
   lastSyncProjectCount: number;
-  isSyncing: boolean;
+  isSyncing: boolean; // local-only, not synced to Supabase
 
   // Actions
   setOneDriveUrl: (url: string) => void;
@@ -26,9 +27,23 @@ interface SyncState {
   clearConfig: () => void;
 }
 
+function syncableState(s: SyncState) {
+  return {
+    oneDriveUrl: s.oneDriveUrl,
+    sheetName: s.sheetName,
+    autoSyncOnLoad: s.autoSyncOnLoad,
+    lastSyncAt: s.lastSyncAt,
+    lastSyncStatus: s.lastSyncStatus,
+    lastSyncError: s.lastSyncError,
+    lastSyncRowCount: s.lastSyncRowCount,
+    lastSyncMemberCount: s.lastSyncMemberCount,
+    lastSyncProjectCount: s.lastSyncProjectCount,
+  };
+}
+
 export const useSyncStore = create<SyncState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       oneDriveUrl: '',
       sheetName: 'Forecasting Hrs',
       autoSyncOnLoad: true,
@@ -41,13 +56,22 @@ export const useSyncStore = create<SyncState>()(
       lastSyncProjectCount: 0,
       isSyncing: false,
 
-      setOneDriveUrl: (url) => set({ oneDriveUrl: url.trim() }),
-      setSheetName: (name) => set({ sheetName: name.trim() }),
-      setAutoSync: (enabled) => set({ autoSyncOnLoad: enabled }),
+      setOneDriveUrl: (url) => {
+        set({ oneDriveUrl: url.trim() });
+        db.saveSyncConfig(syncableState(get()));
+      },
+      setSheetName: (name) => {
+        set({ sheetName: name.trim() });
+        db.saveSyncConfig(syncableState(get()));
+      },
+      setAutoSync: (enabled) => {
+        set({ autoSyncOnLoad: enabled });
+        db.saveSyncConfig(syncableState(get()));
+      },
 
       setSyncStarted: () => set({ isSyncing: true, lastSyncError: null }),
 
-      setSyncSuccess: (rowCount, memberCount, projectCount) =>
+      setSyncSuccess: (rowCount, memberCount, projectCount) => {
         set({
           isSyncing: false,
           lastSyncAt: new Date().toISOString(),
@@ -56,17 +80,21 @@ export const useSyncStore = create<SyncState>()(
           lastSyncRowCount: rowCount,
           lastSyncMemberCount: memberCount,
           lastSyncProjectCount: projectCount,
-        }),
+        });
+        db.saveSyncConfig(syncableState(get()));
+      },
 
-      setSyncError: (error) =>
+      setSyncError: (error) => {
         set({
           isSyncing: false,
           lastSyncAt: new Date().toISOString(),
           lastSyncStatus: 'error',
           lastSyncError: error,
-        }),
+        });
+        db.saveSyncConfig(syncableState(get()));
+      },
 
-      clearConfig: () =>
+      clearConfig: () => {
         set({
           oneDriveUrl: '',
           lastSyncAt: null,
@@ -76,11 +104,13 @@ export const useSyncStore = create<SyncState>()(
           lastSyncMemberCount: 0,
           lastSyncProjectCount: 0,
           isSyncing: false,
-        }),
+        });
+        db.saveSyncConfig(syncableState(get()));
+      },
     }),
     {
       name: 'simpliigence-sync',
       version: 1,
-    }
-  )
+    },
+  ),
 );

@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { ConfirmDialog } from '../components/ui';
 import { performSync } from '../lib/syncOneDrive';
 import { deriveEmployeeSummaries, deriveProjectSummaries } from '../lib/parseSpreadsheet';
+import { db } from '../lib/supabaseSync';
 
 export default function SettingsPage() {
   const forecastStore = useForecastStore();
@@ -47,10 +48,15 @@ export default function SettingsPage() {
     URL.revokeObjectURL(url);
   };
 
-  const clearAll = () => {
+  const clearAll = async () => {
+    // Clear Supabase
+    await db.clearAll();
+    // Clear localStorage
     localStorage.removeItem('simpliigence-forecast');
     localStorage.removeItem('simpliigence-financial');
     localStorage.removeItem('simpliigence-sync');
+    localStorage.removeItem('simpliigence-hiring-forecast');
+    localStorage.removeItem('simpliigence-pipeline');
     window.location.reload();
   };
 

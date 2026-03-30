@@ -2,6 +2,7 @@
  * Seed data from "List of all Employees.xlsx" – Forecasting Hrs sheet.
  * Used for first-visit experience before Dropbox sync is configured.
  */
+import { nanoid } from 'nanoid';
 import type { ForecastAssignment, Month } from '../types/forecast';
 
 type MH = Record<Month, number>;
@@ -100,6 +101,7 @@ const SEED_ROWS: SeedRow[] = [
 
 export function buildSeedAssignments(): ForecastAssignment[] {
   return SEED_ROWS.map((r) => ({
+    id: nanoid(),
     employeeName: r.name,
     notes: '',
     role: r.role,
@@ -112,11 +114,11 @@ export function buildSeedAssignments(): ForecastAssignment[] {
   }));
 }
 
-export function loadSeedIntoStores(): void {
+export async function loadSeedIntoStores(): Promise<void> {
+  const { db } = await import('../lib/supabaseSync');
   const assignments = buildSeedAssignments();
-  localStorage.setItem(
-    'simpliigence-forecast',
-    JSON.stringify({ state: { assignments, weekDates: [] }, version: 1 }),
-  );
+  // Write to Supabase
+  await db.replaceAllAssignments(assignments, []);
+  // Reload page to pick up new data
   window.location.reload();
 }

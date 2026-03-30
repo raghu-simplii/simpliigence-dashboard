@@ -143,6 +143,7 @@ function AddResourceForm({
   const handleSubmit = () => {
     if (!canSubmit) return;
     onAdd({
+      id: '',  // Will be assigned by store
       employeeName: name.trim(),
       notes: '',
       role: finalRole,
@@ -338,6 +339,7 @@ export default function TeamRosterPage() {
     (empName: string, projectName: string) => {
       const existing = assignments.find((a) => a.employeeName === empName);
       addAssignment({
+        id: '',  // Will be assigned by store
         employeeName: empName, notes: '', role: existing?.role ?? '',
         rateCard: existing?.rateCard ?? null, isSI: existing?.isSI ?? false,
         isContractor: existing?.isContractor ?? false, project: projectName,

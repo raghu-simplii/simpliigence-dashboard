@@ -10,6 +10,8 @@ export function emptyMonthRecord(): Record<Month, number> {
 
 /** One row from the "Forecasting Hrs" sheet: one employee on one project. */
 export interface ForecastAssignment {
+  /** Stable unique ID for database persistence. Generated via nanoid. */
+  id: string;
   employeeName: string;
   notes: string;
   role: string;

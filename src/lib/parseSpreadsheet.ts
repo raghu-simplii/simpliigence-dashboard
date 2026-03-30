@@ -169,6 +169,7 @@ export async function parseForecastingSheet(
     }
 
     assignments.push({
+      id: '',  // Will be assigned by store on import
       employeeName: name,
       notes,
       role,
