@@ -176,8 +176,21 @@ export const useForecastStore = create<ForecastState>()(
     }),
     {
       name: 'simpliigence-forecast',
-      version: 2,
-      migrate: () => ({ assignments: [], weekDates: [] }),
+      version: 3,
+      migrate: (persisted: unknown, version: number) => {
+        const old = persisted as Record<string, unknown> | null;
+        const assignments = (old?.assignments as ForecastAssignment[]) ?? [];
+        const weekDates = (old?.weekDates as string[]) ?? [];
+        if (version < 3) {
+          // v3: halve all rate cards (cost = rate × hours, dividing rates by 2 halves all costs)
+          for (const a of assignments) {
+            if (a.rateCard != null) {
+              a.rateCard = Math.round((a.rateCard / 2) * 100) / 100;
+            }
+          }
+        }
+        return { assignments, weekDates };
+      },
     },
   ),
 );
