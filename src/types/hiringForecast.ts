@@ -35,6 +35,14 @@ export interface PipelineProject {
   headcount: Record<RoleCategory, number>;
   /** Hours per person per month (default 160) */
   hoursPerPerson: number;
+  /** Where this project came from */
+  source?: 'manual' | 'zoho';
+  /** Zoho Projects ID (for dedup on re-sync) */
+  zohoId?: string;
+  /** Zoho status badge */
+  zohoStatus?: string;
+  /** Zoho project owner */
+  zohoOwner?: string;
 }
 
 /** Scenario planner settings */

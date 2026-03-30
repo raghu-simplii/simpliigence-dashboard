@@ -52,3 +52,23 @@ export interface WeekColumn {
   date: string; // ISO date string
   label: string; // e.g. "5 Jan"
 }
+
+/** A project from Zoho Projects (or manually added) for the pipeline/forecast. */
+export interface PipelineProject {
+  id: string;
+  name: string;
+  status: string; // e.g. "In Progress", "On Track", "Delayed", "Completed"
+  owner: string;
+  startDate: string | null; // ISO date
+  endDate: string | null;   // ISO date
+  source: 'zoho' | 'manual';
+  zohoId?: string;
+  /** Estimated resource needs (for forecast) */
+  resources: PipelineResource[];
+}
+
+export interface PipelineResource {
+  roleCategory: 'BA' | 'JuniorDev' | 'SeniorDev' | 'Other';
+  count: number;
+  hoursPerMonth: number; // per person, default 160
+}

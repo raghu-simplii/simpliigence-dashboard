@@ -1,17 +1,37 @@
 import { useState } from 'react';
-import { FolderPlus, Trash2 } from 'lucide-react';
+import { FolderPlus, Trash2, CloudDownload } from 'lucide-react';
 import { MONTHS } from '../../types/forecast';
 import type { Month } from '../../types/forecast';
 import type { PipelineProject, RoleCategory } from '../../types/hiringForecast';
 import { ROLE_CATEGORY_LABELS } from '../../types/hiringForecast';
 
+const STATUS_COLORS: Record<string, string> = {
+  'In Progress': 'bg-blue-100 text-blue-700',
+  'On Track': 'bg-green-100 text-green-700',
+  'Active': 'bg-green-100 text-green-700',
+  'Delayed': 'bg-red-100 text-red-700',
+  'Completed': 'bg-slate-100 text-slate-500',
+};
+
 interface Props {
   projects: PipelineProject[];
   onAdd: (proj: Omit<PipelineProject, 'id'>) => void;
   onRemove: (id: string) => void;
+  onUpdate?: (id: string, updates: Partial<Omit<PipelineProject, 'id'>>) => void;
+  onSyncZoho?: () => Promise<void>;
+  isSyncingZoho?: boolean;
+  lastZohoSync?: string | null;
 }
 
-export function PipelineProjectList({ projects, onAdd, onRemove }: Props) {
+export function PipelineProjectList({
+  projects,
+  onAdd,
+  onRemove,
+  onUpdate,
+  onSyncZoho,
+  isSyncingZoho,
+  lastZohoSync,
+}: Props) {
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
   const [startMonth, setStartMonth] = useState<Month>('Apr');
@@ -20,6 +40,7 @@ export function PipelineProjectList({ projects, onAdd, onRemove }: Props) {
   const [jdCount, setJdCount] = useState(0);
   const [sdCount, setSdCount] = useState(0);
   const [hrsPerPerson, setHrsPerPerson] = useState(160);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const handleSubmit = () => {
     if (!name.trim()) return;
@@ -29,6 +50,7 @@ export function PipelineProjectList({ projects, onAdd, onRemove }: Props) {
       endMonth,
       headcount: { BA: baCount, JuniorDev: jdCount, SeniorDev: sdCount },
       hoursPerPerson: hrsPerPerson,
+      source: 'manual',
     });
     setShowForm(false);
     setName('');
@@ -37,10 +59,35 @@ export function PipelineProjectList({ projects, onAdd, onRemove }: Props) {
     setSdCount(0);
   };
 
-  const totalPeople = (p: PipelineProject) => p.headcount.BA + p.headcount.JuniorDev + p.headcount.SeniorDev;
+  const totalPeople = (p: PipelineProject) =>
+    p.headcount.BA + p.headcount.JuniorDev + p.headcount.SeniorDev;
 
   return (
     <div>
+      {/* Zoho sync button */}
+      {onSyncZoho && (
+        <div className="flex items-center justify-between mb-3 pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onSyncZoho}
+              disabled={isSyncingZoho}
+              className="flex items-center gap-1.5 text-xs font-medium bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg hover:bg-blue-100 disabled:opacity-50"
+            >
+              <CloudDownload size={14} className={isSyncingZoho ? 'animate-spin' : ''} />
+              {isSyncingZoho ? 'Syncing...' : 'Sync from Zoho Projects'}
+            </button>
+            {lastZohoSync && (
+              <span className="text-[10px] text-slate-400">
+                Last synced: {new Date(lastZohoSync).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+          <span className="text-[10px] text-slate-400">
+            {projects.filter((p) => p.source === 'zoho').length} from Zoho, {projects.filter((p) => p.source !== 'zoho').length} manual
+          </span>
+        </div>
+      )}
+
       {projects.length === 0 && !showForm && (
         <p className="text-sm text-slate-400 mb-3">No pipeline projects added yet.</p>
       )}
@@ -48,25 +95,90 @@ export function PipelineProjectList({ projects, onAdd, onRemove }: Props) {
       {projects.map((p) => (
         <div key={p.id} className="py-3 border-b border-slate-100 group">
           <div className="flex items-start justify-between">
-            <div>
-              <div className="flex items-center gap-2">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-sm font-semibold text-slate-800">{p.projectName}</span>
                 <span className="text-[10px] text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded">
                   {p.startMonth}–{p.endMonth}
                 </span>
+                {p.source === 'zoho' && (
+                  <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-medium">
+                    Zoho
+                  </span>
+                )}
+                {p.zohoStatus && (
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${STATUS_COLORS[p.zohoStatus] || 'bg-slate-100 text-slate-600'}`}>
+                    {p.zohoStatus}
+                  </span>
+                )}
+                {p.zohoOwner && (
+                  <span className="text-[10px] text-slate-400">{p.zohoOwner}</span>
+                )}
               </div>
-              <div className="flex gap-3 mt-1.5">
-                {(['BA', 'JuniorDev', 'SeniorDev'] as RoleCategory[]).map((cat) => (
-                  p.headcount[cat] > 0 && (
-                    <span key={cat} className="text-xs text-slate-500">
-                      <span className="font-medium text-slate-700">{p.headcount[cat]}</span> {ROLE_CATEGORY_LABELS[cat]}
-                    </span>
-                  )
-                ))}
-              </div>
-              <div className="text-[10px] text-slate-400 mt-1">
-                {totalPeople(p)} people × {p.hoursPerPerson} hrs/mo = {totalPeople(p) * p.hoursPerPerson} hrs/mo total
-              </div>
+
+              {/* Resource headcount — inline editable for Zoho projects */}
+              {editingId === p.id ? (
+                <div className="mt-2 flex items-center gap-2">
+                  {(['BA', 'JuniorDev', 'SeniorDev'] as RoleCategory[]).map((cat) => (
+                    <div key={cat} className="flex items-center gap-1">
+                      <label className="text-[10px] text-slate-400">{ROLE_CATEGORY_LABELS[cat].split(' ')[0]}</label>
+                      <input
+                        type="number"
+                        min={0}
+                        className="w-12 rounded border border-slate-200 px-1 py-0.5 text-xs text-center"
+                        value={p.headcount[cat]}
+                        onChange={(e) => onUpdate?.(p.id, {
+                          headcount: { ...p.headcount, [cat]: Math.max(0, Number(e.target.value) || 0) },
+                        })}
+                      />
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => setEditingId(null)}
+                    className="text-[10px] text-primary font-medium ml-2"
+                  >
+                    Done
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-3 mt-1.5">
+                  {totalPeople(p) > 0 ? (
+                    <>
+                      {(['BA', 'JuniorDev', 'SeniorDev'] as RoleCategory[]).map(
+                        (cat) =>
+                          p.headcount[cat] > 0 && (
+                            <span key={cat} className="text-xs text-slate-500">
+                              <span className="font-medium text-slate-700">{p.headcount[cat]}</span>{' '}
+                              {ROLE_CATEGORY_LABELS[cat]}
+                            </span>
+                          ),
+                      )}
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => setEditingId(p.id)}
+                      className="text-[10px] text-primary/60 hover:text-primary font-medium"
+                    >
+                      + Set resource needs
+                    </button>
+                  )}
+                  {totalPeople(p) > 0 && onUpdate && (
+                    <button
+                      onClick={() => setEditingId(p.id)}
+                      className="text-[10px] text-slate-300 hover:text-primary ml-1"
+                      title="Edit resources"
+                    >
+                      edit
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {totalPeople(p) > 0 && (
+                <div className="text-[10px] text-slate-400 mt-1">
+                  {totalPeople(p)} people x {p.hoursPerPerson} hrs/mo = {totalPeople(p) * p.hoursPerPerson} hrs/mo total
+                </div>
+              )}
             </div>
             <button
               onClick={() => onRemove(p.id)}
@@ -100,7 +212,9 @@ export function PipelineProjectList({ projects, onAdd, onRemove }: Props) {
                 value={startMonth}
                 onChange={(e) => setStartMonth(e.target.value as Month)}
               >
-                {MONTHS.map((m) => <option key={m} value={m}>{m}</option>)}
+                {MONTHS.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
               </select>
             </div>
             <div>
@@ -110,7 +224,9 @@ export function PipelineProjectList({ projects, onAdd, onRemove }: Props) {
                 value={endMonth}
                 onChange={(e) => setEndMonth(e.target.value as Month)}
               >
-                {MONTHS.map((m) => <option key={m} value={m}>{m}</option>)}
+                {MONTHS.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
               </select>
             </div>
           </div>

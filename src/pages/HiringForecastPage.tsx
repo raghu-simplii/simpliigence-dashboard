@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { Users, TrendingUp, AlertTriangle, UserPlus } from 'lucide-react';
-import { useForecastStore, useHiringForecastStore } from '../store';
+import { useForecastStore, useHiringForecastStore, usePipelineStore } from '../store';
 import { StatCard, Card } from '../components/ui';
 import { PageHeader } from '../components/shared/PageHeader';
 import { MONTHS } from '../types/forecast';
@@ -17,8 +17,42 @@ export default function HiringForecastPage() {
   const {
     conciergeConfig, staffingRequests, pipelineProjects, scenarioSettings,
     setConciergeHours, addStaffingRequest, removeStaffingRequest,
-    addPipelineProject, removePipelineProject, updateScenarioSettings,
+    addPipelineProject, removePipelineProject, updatePipelineProject,
+    setZohoProjects, updateScenarioSettings,
   } = useHiringForecastStore();
+  const pipelineStore = usePipelineStore();
+  const [isSyncingZoho, setIsSyncingZoho] = useState(false);
+
+  const handleSyncZoho = useCallback(async () => {
+    setIsSyncingZoho(true);
+    try {
+      // Import Zoho projects from the pipeline store (pre-synced via Claude session)
+      const zohoProjects = pipelineStore.projects.filter((p) => p.source === 'zoho');
+      if (zohoProjects.length === 0) {
+        alert('No Zoho projects found. Run "Sync from Zoho" in a Claude session first to pull projects from Zoho Projects.');
+        return;
+      }
+      // Convert PipelineProject (from pipelineStore) → HiringForecast PipelineProject format
+      const converted = zohoProjects.map((zp) => {
+        const startMonth = zp.startDate ? MONTHS[new Date(zp.startDate).getMonth()] : 'Jan' as Month;
+        const endMonth = zp.endDate ? MONTHS[new Date(zp.endDate).getMonth()] : 'Dec' as Month;
+        return {
+          projectName: zp.name,
+          startMonth,
+          endMonth,
+          headcount: { BA: 0, JuniorDev: 0, SeniorDev: 0 } as Record<'BA' | 'JuniorDev' | 'SeniorDev', number>,
+          hoursPerPerson: 160,
+          source: 'zoho' as const,
+          zohoId: zp.zohoId,
+          zohoStatus: zp.status,
+          zohoOwner: zp.owner,
+        };
+      });
+      setZohoProjects(converted);
+    } finally {
+      setIsSyncingZoho(false);
+    }
+  }, [pipelineStore.projects, setZohoProjects]);
 
   const gapRows = useMemo(
     () => computeHiringForecast(assignments, conciergeConfig, staffingRequests, pipelineProjects, scenarioSettings),
@@ -108,6 +142,10 @@ export default function HiringForecastPage() {
           projects={pipelineProjects}
           onAdd={addPipelineProject}
           onRemove={removePipelineProject}
+          onUpdate={updatePipelineProject}
+          onSyncZoho={handleSyncZoho}
+          isSyncingZoho={isSyncingZoho}
+          lastZohoSync={pipelineStore.lastZohoSync}
         />
       </Card>
 
