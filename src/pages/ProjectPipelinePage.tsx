@@ -3,7 +3,6 @@ import { useForecastStore, usePipelineStore, useFinancialStore } from '../store'
 import { PageHeader } from '../components/shared/PageHeader';
 import { Card, Badge } from '../components/ui';
 import { deriveProjectSummaries } from '../lib/parseSpreadsheet';
-import { MONTHS } from '../types/forecast';
 import type { ZohoPipelineProject, ZohoPhase } from '../types/forecast';
 import { ChevronDown, ChevronRight, RefreshCw, Users, Calendar, Clock, Rocket, DollarSign, TrendingUp } from 'lucide-react';
 
@@ -408,21 +407,6 @@ export default function ProjectPipelinePage() {
     return map;
   }, [projectSummaries]);
 
-  // Build a set of all forecast names that are claimed by a current project
-  const claimedForecastNames = useMemo(() => {
-    const set = new Set<string>();
-    for (const p of currentProjects) {
-      if (p.forecastName) set.add(p.forecastName.toLowerCase());
-      set.add(p.name.toLowerCase());
-    }
-    return set;
-  }, [currentProjects]);
-
-  const forecastOnlyProjects = useMemo(
-    () => projectSummaries.filter((ps) => !claimedForecastNames.has(ps.name.toLowerCase())),
-    [projectSummaries, claimedForecastNames],
-  );
-
   // Stats
   const activeProjects = currentProjects.filter((p) => !['Completed', 'On Hold'].includes(p.status)).length;
   const totalPhases = currentProjects.reduce((sum, p) => sum + (p.phases?.length ?? 0), 0);
@@ -431,7 +415,7 @@ export default function ProjectPipelinePage() {
     <>
       <PageHeader
         title="Current Projects"
-        subtitle={`${currentProjects.length} active projects · ${forecastOnlyProjects.length} forecast-only`}
+        subtitle={`${currentProjects.length} projects from Zoho`}
         action={
           lastSync && (
             <div className="flex items-center gap-2 text-xs text-slate-400">
@@ -443,7 +427,7 @@ export default function ProjectPipelinePage() {
       />
 
       {/* Summary stats */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="bg-white rounded-lg border border-slate-200 p-4">
           <div className="text-2xl font-bold text-slate-800">{currentProjects.length}</div>
           <div className="text-xs text-slate-500">Current Projects</div>
@@ -455,10 +439,6 @@ export default function ProjectPipelinePage() {
         <div className="bg-white rounded-lg border border-slate-200 p-4">
           <div className="text-2xl font-bold text-emerald-600">{totalPhases}</div>
           <div className="text-xs text-slate-500">Total Phases</div>
-        </div>
-        <div className="bg-white rounded-lg border border-slate-200 p-4">
-          <div className="text-2xl font-bold text-amber-600">{forecastOnlyProjects.length}</div>
-          <div className="text-xs text-slate-500">Forecast-Only Projects</div>
         </div>
       </div>
 
@@ -480,37 +460,6 @@ export default function ProjectPipelinePage() {
         })}
       </div>
 
-      {/* Forecast-only projects (from Team tab, not in Zoho) */}
-      {forecastOnlyProjects.length > 0 && (
-        <>
-          <h2 className="text-lg font-semibold text-slate-800 mb-3">Forecast-Only Projects <span className="text-sm font-normal text-slate-400">(from Team tab)</span></h2>
-          <div className="grid grid-cols-1 gap-3">
-            {forecastOnlyProjects.map((p) => (
-              <Card key={p.name}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-semibold text-slate-800 text-base">{p.name}</h3>
-                    <p className="text-sm text-slate-500 mt-0.5">
-                      {p.employees.length} team members · {p.totalHours.toLocaleString()} total hours
-                      {p.loadedCost > 0 && <> · <span className="text-green-600">${p.loadedCost.toLocaleString()} expected cost</span></>}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    {MONTHS.map((m) => (
-                      <div key={m} className="text-center">
-                        <div className="text-[10px] text-slate-400">{m}</div>
-                        <div className={`text-xs font-semibold tabular-nums ${p.monthlyHours[m] > 0 ? 'text-slate-700' : 'text-slate-300'}`}>
-                          {p.monthlyHours[m] > 0 ? p.monthlyHours[m] : '—'}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </>
-      )}
     </>
   );
 }
