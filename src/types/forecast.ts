@@ -53,6 +53,18 @@ export interface WeekColumn {
   label: string; // e.g. "5 Jan"
 }
 
+/** A phase/milestone within a Zoho project. */
+export interface ZohoPhase {
+  id: string;
+  name: string;
+  startDate: string; // ISO date
+  endDate: string;   // ISO date
+  status: 'Completed' | 'In Progress' | 'Active' | string;
+  isClosed: boolean;
+  completedOn?: string; // ISO date
+  owner: string;
+}
+
 /** A project from Zoho Projects (or manually added) for the pipeline/forecast. */
 export interface ZohoPipelineProject {
   id: string;
@@ -65,6 +77,8 @@ export interface ZohoPipelineProject {
   zohoId?: string;
   /** Estimated resource needs (for forecast) */
   resources: PipelineResource[];
+  /** Phases/milestones from Zoho */
+  phases?: ZohoPhase[];
 }
 
 export interface PipelineResource {
