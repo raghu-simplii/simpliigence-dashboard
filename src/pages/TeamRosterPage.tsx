@@ -263,7 +263,8 @@ export default function TeamRosterPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   const selectedMonth = MONTHS[selectedMonthIdx];
-  const weekDates = useMemo(() => getWeeksInMonth(2026, selectedMonthIdx), [selectedMonthIdx]);
+  const currentYear = now.getFullYear();
+  const weekDates = useMemo(() => getWeeksInMonth(currentYear, selectedMonthIdx), [currentYear, selectedMonthIdx]);
 
   const roles = useMemo(() => [...new Set(groups.map((g) => g.role).filter(Boolean))].sort(), [groups]);
   const allProjects = useMemo(() => [...new Set(assignments.map((a) => a.project))].sort(), [assignments]);
@@ -421,7 +422,7 @@ export default function TeamRosterPage() {
         </div>
 
         <p className="text-xs text-slate-400 mb-3">
-          Showing weeks in <strong>{selectedMonth} 2026</strong>. Click any hour cell to edit. Expand a resource to see hours by project.
+          Showing weeks in <strong>{selectedMonth} {currentYear}</strong>. Click any hour cell to edit. Expand a resource to see hours by project.
         </p>
 
         {confirmDelete && (

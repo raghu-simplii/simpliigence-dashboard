@@ -196,7 +196,7 @@ export default function DashboardPage() {
 
   return (
     <>
-      <PageHeader title="Command Center" subtitle="Resource forecasting overview — Jan to Jun 2026" />
+      <PageHeader title="Command Center" subtitle={`Resource forecasting overview — ${MONTHS[0]} to ${MONTHS[MONTHS.length - 1]} ${new Date().getFullYear()}`} />
 
       <SmartQueryPanel assignments={assignments} />
 
