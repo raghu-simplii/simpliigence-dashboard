@@ -217,23 +217,25 @@ function ZohoProjectCard({ project, teamAllocation, loadedCost, cadToUsdRate, on
             </div>
           )}
 
-          {/* Revenue & Margin summary */}
-          {(revenue > 0 || loadedCost > 0) && (
-            <div className="flex items-center gap-4 mt-2 ml-6 text-xs">
-              {revenue > 0 && (
-                <span className="flex items-center gap-1 text-emerald-700"><DollarSign size={12} /> Revenue: {currSymbol}{revenue.toLocaleString()} {curr}</span>
-              )}
-              {loadedCost > 0 && (
-                <span className="flex items-center gap-1 text-slate-600"><TrendingUp size={12} /> Cost: ${Math.round(loadedCost).toLocaleString()} USD</span>
-              )}
-              {revenue > 0 && loadedCost > 0 && (
-                <span className={`font-semibold ${margin >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                  Margin: ${Math.round(margin).toLocaleString()} ({marginPct}%)
-                  {curr === 'CAD' && <span className="font-normal text-slate-400 ml-1">(converted)</span>}
-                </span>
-              )}
-            </div>
-          )}
+          {/* Revenue, Expected Cost & Expected Margin — always visible */}
+          <div className="flex items-center gap-4 mt-2 ml-6 text-xs flex-wrap">
+            {revenue > 0 ? (
+              <span className="flex items-center gap-1 text-emerald-700"><DollarSign size={12} /> Revenue: {currSymbol}{revenue.toLocaleString()} {curr}</span>
+            ) : (
+              <span className="flex items-center gap-1 text-slate-400"><DollarSign size={12} /> Revenue: <em>not set</em></span>
+            )}
+            {loadedCost > 0 ? (
+              <span className="flex items-center gap-1 text-slate-600"><TrendingUp size={12} /> Expected Cost: ${Math.round(loadedCost).toLocaleString()} USD</span>
+            ) : (
+              <span className="flex items-center gap-1 text-slate-400"><TrendingUp size={12} /> Expected Cost: <em>no rate cards</em></span>
+            )}
+            {revenue > 0 && loadedCost > 0 && (
+              <span className={`font-semibold ${margin >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                Expected Margin: ${Math.round(margin).toLocaleString()} ({marginPct}%)
+                {curr === 'CAD' && <span className="font-normal text-slate-400 ml-1">(converted)</span>}
+              </span>
+            )}
+          </div>
         </div>
         {/* mini progress */}
         {phases.length > 0 && (
@@ -350,21 +352,30 @@ function ZohoProjectCard({ project, teamAllocation, loadedCost, cadToUsdRate, on
                 />
               </div>
             </div>
-            {loadedCost > 0 && (
-              <div>
-                <label className="text-xs text-slate-500 block mb-1">Loaded Cost (USD)</label>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Expected Loaded Cost (USD)</label>
+              {loadedCost > 0 ? (
                 <span className="text-sm font-medium text-slate-700">${Math.round(loadedCost).toLocaleString()}</span>
-              </div>
-            )}
+              ) : (
+                <span className="text-sm text-slate-400 italic">No rate cards assigned</span>
+              )}
+              <span className="text-[10px] text-slate-400 block mt-0.5">Based on forecasted hours × rate cards</span>
+            </div>
             {revenue > 0 && loadedCost > 0 && (
               <div>
-                <label className="text-xs text-slate-500 block mb-1">Margin {curr === 'CAD' ? '(CAD→USD converted)' : ''}</label>
+                <label className="text-xs text-slate-500 block mb-1">Expected Margin {curr === 'CAD' ? '(CAD→USD converted)' : ''}</label>
                 <span className={`text-sm font-bold ${margin >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                   ${Math.round(margin).toLocaleString()} ({marginPct}%)
                 </span>
                 {curr === 'CAD' && (
                   <span className="text-[10px] text-slate-400 block mt-0.5">Revenue {currSymbol}{revenue.toLocaleString()} × {cadToUsdRate} = ${Math.round(revenueUsd).toLocaleString()} USD</span>
                 )}
+              </div>
+            )}
+            {revenue > 0 && loadedCost === 0 && (
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Expected Margin</label>
+                <span className="text-xs text-slate-400 italic">Set rate cards on team members to calculate margin</span>
               </div>
             )}
           </div>
@@ -481,7 +492,7 @@ export default function ProjectPipelinePage() {
                     <h3 className="font-semibold text-slate-800 text-base">{p.name}</h3>
                     <p className="text-sm text-slate-500 mt-0.5">
                       {p.employees.length} team members · {p.totalHours.toLocaleString()} total hours
-                      {p.loadedCost > 0 && <> · <span className="text-green-600">${p.loadedCost.toLocaleString()} loaded cost</span></>}
+                      {p.loadedCost > 0 && <> · <span className="text-green-600">${p.loadedCost.toLocaleString()} expected cost</span></>}
                     </p>
                   </div>
                   <div className="flex gap-2">
