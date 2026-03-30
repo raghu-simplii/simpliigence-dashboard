@@ -3,13 +3,23 @@ import type { ForecastAssignment, Month } from '../types/forecast';
 import type { RoleCategory } from '../types/hiringForecast';
 import { ROLE_CATEGORIES } from '../types/hiringForecast';
 
-/** Classify a spreadsheet role string into BA, JuniorDev, SeniorDev, or null (not tracked for hiring). */
+/**
+ * Classify a role string into BA, JuniorDev, SeniorDev, or null (not tracked for hiring).
+ *
+ * Standardized roles:
+ *   Tracked:     Business Analyst → BA, Developer → JuniorDev, Senior Developer → SeniorDev
+ *   Not tracked: Architect, Team Lead, Quality Assurance, Manager, Contractor
+ */
 export function classifyRole(role: string): RoleCategory | null {
-  const lower = role.toLowerCase();
+  const lower = role.toLowerCase().trim();
+  if (lower === 'senior developer') return 'SeniorDev';
+  if (lower === 'developer') return 'JuniorDev';
+  if (lower === 'business analyst') return 'BA';
+  // Fuzzy fallback for non-standardized roles (e.g. from spreadsheet imports)
   if (lower.includes('senior') && lower.includes('developer')) return 'SeniorDev';
   if (lower.includes('developer')) return 'JuniorDev';
-  if (lower.includes('analyst') || lower.includes(' ba')) return 'BA';
-  // Consultants, Team Leads, Contractors, US Resources, etc. — not tracked for hiring
+  if (lower.includes('analyst')) return 'BA';
+  // Architect, Team Lead, QA, Manager, Contractor, etc. — not tracked for hiring
   return null;
 }
 
