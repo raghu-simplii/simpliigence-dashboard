@@ -9,14 +9,13 @@ import { ROLE_CATEGORIES, ROLE_CATEGORY_LABELS } from '../types/hiringForecast';
 import type { PipelineProject } from '../types/hiringForecast';
 import { computeHiringForecast, aggregateGapRows } from '../lib/hiringForecastCalc';
 import { DemandCapacityChart } from '../components/hiring/DemandCapacityChart';
-import { ConciergeConfigPanel } from '../components/hiring/ConciergeConfigPanel';
 import { StaffingRequestList } from '../components/hiring/StaffingRequestList';
 
 export default function HiringForecastPage() {
   const assignments = useForecastStore((s) => s.assignments);
   const {
-    conciergeConfig, staffingRequests, scenarioSettings,
-    setConciergeHours, addStaffingRequest, removeStaffingRequest,
+    staffingRequests, scenarioSettings,
+    addStaffingRequest, removeStaffingRequest,
     updateScenarioSettings,
   } = useHiringForecastStore();
   const pipelineStoreProjects = usePipelineStore((s) => s.projects);
@@ -49,8 +48,8 @@ export default function HiringForecastPage() {
   }, [pipelineStoreProjects]);
 
   const gapRows = useMemo(
-    () => computeHiringForecast(assignments, conciergeConfig, staffingRequests, pipelineProjects, scenarioSettings),
-    [assignments, conciergeConfig, staffingRequests, pipelineProjects, scenarioSettings],
+    () => computeHiringForecast(assignments, staffingRequests, pipelineProjects, scenarioSettings),
+    [assignments, staffingRequests, pipelineProjects, scenarioSettings],
   );
 
   const summary = useMemo(() => aggregateGapRows(gapRows), [gapRows]);
@@ -116,7 +115,6 @@ export default function HiringForecastPage() {
           <div className="flex-1" />
           <div className="flex gap-3 text-xs text-slate-500">
             <span><span className="inline-block w-3 h-3 rounded bg-[#3b82f6] mr-1 align-middle" />Project</span>
-            <span><span className="inline-block w-3 h-3 rounded bg-[#f59e0b] mr-1 align-middle" />Concierge</span>
             <span><span className="inline-block w-3 h-3 rounded bg-[#ef4444] mr-1 align-middle" />Pipeline</span>
             <span><span className="inline-block w-3 h-3 rounded bg-[#8b5cf6] mr-1 align-middle" />Staffing</span>
             <span><span className="inline-block w-3 h-3 rounded bg-[#10b981] mr-1 align-middle" />Capacity</span>
@@ -140,19 +138,14 @@ export default function HiringForecastPage() {
         </Card>
       )}
 
-      {/* Two-column: Concierge + Staffing */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        <Card title="Concierge Demand (hrs/month)">
-          <ConciergeConfigPanel config={conciergeConfig} onChange={setConciergeHours} />
-        </Card>
-        <Card title="Staffing Requests (Zoho / Manual)">
-          <StaffingRequestList
-            requests={staffingRequests}
-            onAdd={addStaffingRequest}
-            onRemove={removeStaffingRequest}
-          />
-        </Card>
-      </div>
+      {/* Staffing Requests */}
+      <Card title="Staffing Requests" className="mb-6">
+        <StaffingRequestList
+          requests={staffingRequests}
+          onAdd={addStaffingRequest}
+          onRemove={removeStaffingRequest}
+        />
+      </Card>
 
       {/* Hiring Summary Table */}
       <Card title="Hiring Summary">
@@ -178,7 +171,7 @@ export default function HiringForecastPage() {
                       const row = catRows.find((r) => r.month === m);
                       if (!row) return <td key={m} className="py-3 text-center text-slate-300">—</td>;
                       const hasGap = row.gap > 0;
-                      const tip = `Project: ${Math.round(row.projectDemand)} hrs\nConcierge: ${Math.round(row.conciergeDemand)} hrs\nPipeline: ${Math.round(row.pipelineDemand)} hrs\nStaffing: ${Math.round(row.staffingDemand)} hrs\n──────\nTotal Demand: ${Math.round(row.totalDemand)} hrs\nCapacity: ${Math.round(row.totalCapacity)} hrs (${row.currentHeadcount} × ${Math.round(row.effectiveCapacityPerPerson)})`;
+                      const tip = `Project: ${Math.round(row.projectDemand)} hrs\nPipeline: ${Math.round(row.pipelineDemand)} hrs\nStaffing: ${Math.round(row.staffingDemand)} hrs\n──────\nTotal Demand: ${Math.round(row.totalDemand)} hrs\nCapacity: ${Math.round(row.totalCapacity)} hrs (${row.currentHeadcount} × ${Math.round(row.effectiveCapacityPerPerson)})`;
                       return (
                         <td key={m} className="py-3 text-center">
                           <div title={tip} className={`inline-flex flex-col items-center px-2 py-1 rounded cursor-help ${hasGap ? 'bg-red-50' : 'bg-green-50'}`}>

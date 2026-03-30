@@ -1,7 +1,6 @@
 import { MONTHS } from '../types/forecast';
 import type { Month } from '../types/forecast';
 import type {
-  ConciergeConfig,
   HiringGapRow,
   PipelineProject,
   RoleCategory,
@@ -53,10 +52,10 @@ function sumPipelineDemand(
 /**
  * Compute the full hiring gap analysis.
  * Returns one HiringGapRow per (month, roleCategory) within the forecast period.
+ * Demand sources: project allocations (incl. Concierge project), pipeline projects, staffing requests.
  */
 export function computeHiringForecast(
   assignments: ForecastAssignment[],
-  conciergeConfig: ConciergeConfig,
   staffingRequests: StaffingRequest[],
   pipelineProjects: PipelineProject[],
   settings: ScenarioSettings,
@@ -72,10 +71,9 @@ export function computeHiringForecast(
 
     for (const cat of ROLE_CATEGORIES) {
       const pd = projectDemand[cat][month];
-      const cd = conciergeConfig.monthlyHours[cat][month];
       const sd = sumStaffingDemand(staffingRequests, cat, month);
       const ppd = sumPipelineDemand(pipelineProjects, cat, month);
-      const totalDemand = pd + cd + sd + ppd;
+      const totalDemand = pd + sd + ppd;
       const totalCapacity = headcount[cat] * effectiveCapPerPerson;
       const gap = totalDemand - totalCapacity;
 
@@ -83,7 +81,7 @@ export function computeHiringForecast(
         month,
         roleCategory: cat,
         projectDemand: pd,
-        conciergeDemand: cd,
+        conciergeDemand: 0,
         staffingDemand: sd,
         pipelineDemand: ppd,
         totalDemand,
