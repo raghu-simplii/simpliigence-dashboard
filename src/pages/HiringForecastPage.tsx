@@ -178,9 +178,10 @@ export default function HiringForecastPage() {
                       const row = catRows.find((r) => r.month === m);
                       if (!row) return <td key={m} className="py-3 text-center text-slate-300">—</td>;
                       const hasGap = row.gap > 0;
+                      const tip = `Project: ${Math.round(row.projectDemand)} hrs\nConcierge: ${Math.round(row.conciergeDemand)} hrs\nPipeline: ${Math.round(row.pipelineDemand)} hrs\nStaffing: ${Math.round(row.staffingDemand)} hrs\n──────\nTotal Demand: ${Math.round(row.totalDemand)} hrs\nCapacity: ${Math.round(row.totalCapacity)} hrs (${row.currentHeadcount} × ${Math.round(row.effectiveCapacityPerPerson)})`;
                       return (
                         <td key={m} className="py-3 text-center">
-                          <div className={`inline-flex flex-col items-center px-2 py-1 rounded ${hasGap ? 'bg-red-50' : 'bg-green-50'}`}>
+                          <div title={tip} className={`inline-flex flex-col items-center px-2 py-1 rounded cursor-help ${hasGap ? 'bg-red-50' : 'bg-green-50'}`}>
                             <span className={`text-xs font-semibold tabular-nums ${hasGap ? 'text-red-700' : 'text-green-700'}`}>
                               {row.hiresNeeded > 0 ? `+${row.hiresNeeded}` : '0'}
                             </span>

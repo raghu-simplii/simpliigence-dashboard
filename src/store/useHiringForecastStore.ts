@@ -5,7 +5,7 @@ import type { Month } from '../types/forecast';
 import type { ConciergeConfig, RoleCategory, ScenarioSettings, StaffingRequest } from '../types/hiringForecast';
 
 function defaultConciergeConfig(): ConciergeConfig {
-  // ~400 hrs/month total, split: BA 130, JuniorDev 170, SeniorDev 100
+  // Default to zero — users configure actual concierge demand as needed
   const fill = (val: number): Record<Month, number> => {
     const r: Record<string, number> = {};
     for (const m of MONTHS) r[m] = val;
@@ -13,9 +13,9 @@ function defaultConciergeConfig(): ConciergeConfig {
   };
   return {
     monthlyHours: {
-      BA: fill(130),
-      JuniorDev: fill(170),
-      SeniorDev: fill(100),
+      BA: fill(0),
+      JuniorDev: fill(0),
+      SeniorDev: fill(0),
     },
   };
 }
@@ -82,11 +82,15 @@ export const useHiringForecastStore = create<HiringForecastState>()(
     }),
     {
       name: 'simpliigence-hiring-forecast',
-      version: 5,
-      migrate: (persisted: unknown) => {
+      version: 6,
+      migrate: (persisted: unknown, version: number) => {
         const old = persisted as Record<string, unknown> | null;
+        // v6: reset concierge config to zero defaults (previously had inflated defaults)
+        const conciergeConfig = version < 6
+          ? defaultConciergeConfig()
+          : (old?.conciergeConfig as ConciergeConfig) ?? defaultConciergeConfig();
         return {
-          conciergeConfig: (old?.conciergeConfig as ConciergeConfig) ?? defaultConciergeConfig(),
+          conciergeConfig,
           staffingRequests: (old?.staffingRequests as StaffingRequest[]) ?? [],
           scenarioSettings: (old?.scenarioSettings as ScenarioSettings) ?? defaultScenarioSettings(),
         };
