@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react';
 import { useConciergeStore } from '../store/useConciergeStore';
 import type { ConciergeTicket } from '../store/useConciergeStore';
+import { useForecastStore } from '../store';
+import { MONTHS } from '../types/forecast';
 import { PageHeader } from '../components/shared/PageHeader';
 import { Card, StatCard, Badge } from '../components/ui';
 import {
@@ -12,6 +14,7 @@ import {
   Clock,
   PauseCircle,
   ExternalLink,
+  CalendarClock,
 } from 'lucide-react';
 
 /* ── Helpers ───────────────────────────────────── */
@@ -135,8 +138,27 @@ function ClientGroupCard({ group }: { group: ClientGroup }) {
 
 export default function ConciergePage() {
   const { tickets, lastSynced } = useConciergeStore();
+  const assignments = useForecastStore((s) => s.assignments);
   const [statusFilter, setStatusFilter] = useState<'All' | 'Open' | 'On Hold'>('All');
   const [search, setSearch] = useState('');
+
+  /* ── Current month estimated hours ─── */
+  const currentMonth = MONTHS[new Date().getMonth()];
+  const monthlyHours = useMemo(() => {
+    const total = assignments.reduce((sum, a) => sum + (a.monthlyTotals[currentMonth] ?? 0), 0);
+    // Per-project breakdown
+    const byProject = new Map<string, number>();
+    for (const a of assignments) {
+      const hrs = a.monthlyTotals[currentMonth] ?? 0;
+      if (hrs > 0) {
+        byProject.set(a.project, (byProject.get(a.project) ?? 0) + hrs);
+      }
+    }
+    const projects = Array.from(byProject.entries())
+      .map(([name, hours]) => ({ name, hours }))
+      .sort((a, b) => b.hours - a.hours);
+    return { total, projects };
+  }, [assignments, currentMonth]);
 
   /* ── Derived data ─── */
   const filtered = useMemo(() => {
@@ -199,7 +221,7 @@ export default function ConciergePage() {
       />
 
       {/* ── Summary Cards ─── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         <StatCard
           label="Total Tickets"
           value={stats.total}
@@ -221,7 +243,27 @@ export default function ConciergePage() {
           subtitle={stats.overdue > 0 ? 'Past due date' : 'All on track'}
           icon={<Clock size={20} />}
         />
+        <StatCard
+          label={`${currentMonth} Est. Hours`}
+          value={monthlyHours.total.toLocaleString()}
+          subtitle={`${monthlyHours.projects.length} active projects`}
+          icon={<CalendarClock size={20} />}
+        />
       </div>
+
+      {/* ── Estimated Hours Breakdown ─── */}
+      {monthlyHours.projects.length > 0 && (
+        <Card title={`${currentMonth} ${new Date().getFullYear()} — Estimated Hours by Project`}>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
+            {monthlyHours.projects.map((p) => (
+              <div key={p.name} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2">
+                <span className="text-sm text-slate-700 truncate mr-2">{p.name}</span>
+                <span className="text-sm font-semibold text-slate-900 whitespace-nowrap">{p.hours.toLocaleString()} hrs</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* ── Filter Bar ─── */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-6">

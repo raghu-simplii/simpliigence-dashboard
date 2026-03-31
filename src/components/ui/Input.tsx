@@ -7,13 +7,13 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 
 export function Input({ label, error, className = '', ...props }: InputProps) {
   return (
-    <div className="space-y-1">
-      {label && <label className="block text-sm font-medium text-slate-700">{label}</label>}
+    <div className="space-y-1.5">
+      {label && <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">{label}</label>}
       <input
-        className={`w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary ${error ? 'border-red-400' : ''} ${className}`}
+        className={`w-full px-3 py-2 rounded-lg border text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:border-primary transition-colors ${error ? 'border-red-400 focus-visible:ring-red-400/50' : 'border-slate-300'} ${className}`}
         {...props}
       />
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      {error && <p className="text-xs text-red-500 font-medium">{error}</p>}
     </div>
   );
 }
@@ -26,10 +26,10 @@ interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
 
 export function Select({ label, options, placeholder, className = '', ...props }: SelectProps) {
   return (
-    <div className="space-y-1">
-      {label && <label className="block text-sm font-medium text-slate-700">{label}</label>}
+    <div className="space-y-1.5">
+      {label && <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">{label}</label>}
       <select
-        className={`w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary bg-white ${className}`}
+        className={`w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:border-primary bg-white transition-colors ${className}`}
         {...props}
       >
         {placeholder && <option value="">{placeholder}</option>}
@@ -54,17 +54,17 @@ export function MultiSelect({ label, options, value, onChange }: MultiSelectProp
   };
 
   return (
-    <div className="space-y-1">
-      {label && <label className="block text-sm font-medium text-slate-700">{label}</label>}
+    <div className="space-y-1.5">
+      {label && <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">{label}</label>}
       <div className="flex flex-wrap gap-2">
         {options.map((opt) => (
           <button
             key={opt.value}
             type="button"
             onClick={() => toggle(opt.value)}
-            className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+            className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all duration-150 ${
               value.includes(opt.value)
-                ? 'bg-primary text-white border-primary'
+                ? 'bg-primary text-white border-primary shadow-sm'
                 : 'bg-white text-slate-600 border-slate-300 hover:border-primary hover:text-primary'
             }`}
           >
@@ -82,10 +82,10 @@ interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
 
 export function Textarea({ label, className = '', ...props }: TextareaProps) {
   return (
-    <div className="space-y-1">
-      {label && <label className="block text-sm font-medium text-slate-700">{label}</label>}
+    <div className="space-y-1.5">
+      {label && <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">{label}</label>}
       <textarea
-        className={`w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary resize-none ${className}`}
+        className={`w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:border-primary resize-none transition-colors ${className}`}
         rows={3}
         {...props}
       />
