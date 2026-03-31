@@ -135,6 +135,11 @@ function AddResourceForm({
   const [type, setType] = useState<'employee' | 'si' | 'contractor'>('employee');
   const [project, setProject] = useState('');
   const [customProject, setCustomProject] = useState('');
+  const [monthlyHrs, setMonthlyHrs] = useState<Record<Month, string>>(() => {
+    const m: Record<string, string> = {};
+    for (const mo of MONTHS) m[mo] = '';
+    return m as Record<Month, string>;
+  });
 
   const finalRole = role === '__custom__' ? customRole : role;
   const finalProject = project === '__custom__' ? customProject : project;
@@ -142,6 +147,11 @@ function AddResourceForm({
 
   const handleSubmit = () => {
     if (!canSubmit) return;
+    const mt = emptyMonthRecord();
+    for (const mo of MONTHS) {
+      const v = parseFloat(monthlyHrs[mo]);
+      if (!isNaN(v) && v > 0) mt[mo] = v;
+    }
     onAdd({
       id: '',  // Will be assigned by store
       employeeName: name.trim(),
@@ -152,7 +162,7 @@ function AddResourceForm({
       isContractor: type === 'contractor',
       project: finalProject.trim(),
       weeklyHours: {},
-      monthlyTotals: emptyMonthRecord(),
+      monthlyTotals: mt,
     });
   };
 
@@ -197,6 +207,25 @@ function AddResourceForm({
         <div className="col-span-2 flex items-end gap-2">
           <button onClick={handleSubmit} disabled={!canSubmit} className="px-4 py-1.5 text-sm font-medium rounded-lg bg-primary text-white hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed">Add Resource</button>
           <button onClick={onCancel} className="px-4 py-1.5 text-sm font-medium rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50">Cancel</button>
+        </div>
+      </div>
+      {/* Monthly hours row */}
+      <div className="mt-3 pt-3 border-t border-primary/10">
+        <label className="block text-xs text-slate-500 mb-2">Monthly Hours (optional)</label>
+        <div className="grid grid-cols-6 md:grid-cols-12 gap-1.5">
+          {MONTHS.map((mo) => (
+            <div key={mo} className="text-center">
+              <span className="block text-[10px] text-slate-400 mb-0.5">{mo}</span>
+              <input
+                type="number"
+                min="0"
+                className="w-full rounded border border-slate-300 px-1 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-primary/50"
+                placeholder="0"
+                value={monthlyHrs[mo]}
+                onChange={(e) => setMonthlyHrs((prev) => ({ ...prev, [mo]: e.target.value }))}
+              />
+            </div>
+          ))}
         </div>
       </div>
     </div>
