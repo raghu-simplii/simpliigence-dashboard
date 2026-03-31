@@ -483,6 +483,7 @@ export default function TeamRosterPage() {
                   </th>
                 ))}
                 <th className="pb-3 font-semibold text-slate-600 text-right w-16">{selectedMonth}</th>
+                <th className="pb-3 font-semibold text-slate-600 text-right w-16">Util %</th>
                 <th className="pb-3 font-semibold text-slate-600 text-right w-16">Year</th>
                 <th className="pb-3 w-8" />
               </tr>
@@ -583,6 +584,20 @@ export default function TeamRosterPage() {
                         </span>
                       </td>
 
+                      {/* Utilization % for the selected month (based on 160 hrs capacity) */}
+                      <td className="py-2 text-right">
+                        {(() => {
+                          const util = monthTotal > 0 ? Math.round((monthTotal / 160) * 100) : 0;
+                          return (
+                            <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-bold ${
+                              util > 100 ? 'text-red-600 bg-red-50' : util >= 80 ? 'text-green-600 bg-green-50' : util >= 50 ? 'text-blue-600 bg-blue-50' : util > 0 ? 'text-amber-600 bg-amber-50' : 'text-slate-300'
+                            }`}>
+                              {util > 0 ? `${util}%` : '—'}
+                            </span>
+                          );
+                        })()}
+                      </td>
+
                       <td className="py-2 text-right">
                         <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-bold ${
                           g.totalHours >= 800 ? 'text-green-600 bg-green-50' : g.totalHours >= 400 ? 'text-blue-600 bg-blue-50' : g.totalHours > 0 ? 'text-amber-600 bg-amber-50' : 'text-slate-300'
@@ -645,6 +660,7 @@ export default function TeamRosterPage() {
                           <td className="py-1.5 text-right">
                             <span className="text-xs text-slate-500 font-medium">{projMonthTotal > 0 ? projMonthTotal : '—'}</span>
                           </td>
+                          <td />
                           <td className="py-1.5 text-right">
                             <span className="text-xs text-slate-400">{projYearTotal > 0 ? projYearTotal : '—'}</span>
                           </td>
@@ -676,7 +692,7 @@ export default function TeamRosterPage() {
                           )}
                         </td>
                         {weekDates.map((w) => <td key={w} />)}
-                        <td /><td /><td />
+                        <td /><td /><td /><td />
                       </tr>
                     )}
                   </Fragment>
@@ -710,6 +726,12 @@ export default function TeamRosterPage() {
                     ))}
                     <td className="py-2.5 text-right">
                       <span className="inline-block px-1.5 py-0.5 rounded text-xs font-bold text-slate-800 bg-slate-200">{grandMonth > 0 ? grandMonth.toLocaleString() : '—'}</span>
+                    </td>
+                    <td className="py-2.5 text-right">
+                      {(() => {
+                        const avgUtil = filtered.length > 0 ? Math.round((grandMonth / (filtered.length * 160)) * 100) : 0;
+                        return <span className="inline-block px-1.5 py-0.5 rounded text-xs font-bold text-slate-800 bg-slate-200">{avgUtil > 0 ? `${avgUtil}%` : '—'}</span>;
+                      })()}
                     </td>
                     <td className="py-2.5 text-right">
                       <span className="inline-block px-1.5 py-0.5 rounded text-xs font-bold text-slate-800 bg-slate-200">{grandYear > 0 ? grandYear.toLocaleString() : '—'}</span>
