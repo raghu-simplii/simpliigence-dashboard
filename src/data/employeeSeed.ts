@@ -29,7 +29,7 @@ const SEED_ROWS: SeedRow[] = [
   { name: 'Sunil C', role: 'Quality Assurance', rate: 10, isSI: true, isContractor: false, project: 'AboveAll', monthly: mh(96.5, 34.5, 5, 0, 0, 0) },
   { name: 'Syed Mohaseen Elahi Hossain', role: 'Business Analyst', rate: 15, isSI: true, isContractor: false, project: 'AboveAll', monthly: mh(108, 17, 0, 0, 0, 0) },
   { name: 'Vinod', role: 'Quality Assurance', rate: 22.5, isSI: false, isContractor: false, project: 'AboveAll', monthly: mh(41.5, 41, 0, 0, 0, 0) },
-  { name: 'MOhan', role: 'Developer', rate: 22.5, isSI: false, isContractor: false, project: 'AboveAll', monthly: mh(80, 120, 0, 0, 0, 0) },
+  { name: 'Mohan', role: 'Developer', rate: 22.5, isSI: false, isContractor: false, project: 'AboveAll', monthly: mh(80, 120, 0, 0, 0, 0) },
   { name: 'Shikhar Sharma', role: 'Developer', rate: 9, isSI: false, isContractor: false, project: 'AboveAll', monthly: mh(0, 3.5, 0, 0, 0, 0) },
   { name: 'Pallavi', role: 'Architect', rate: 22.5, isSI: false, isContractor: false, project: 'AboveAll', monthly: mh(3, 12, 0, 0, 0, 0) },
   { name: 'Anupama', role: 'Architect', rate: 22.5, isSI: true, isContractor: false, project: 'AboveAll', monthly: mh(40, 40, 15, 0, 0, 0) },

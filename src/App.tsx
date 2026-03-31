@@ -20,9 +20,13 @@ import {
  * On app start:
  * 1. Try loading data from Supabase (shared database)
  * 2. If Supabase has data → hydrate stores (overrides localStorage)
- * 3. If Supabase is empty → seed from current localStorage/seed data, then push to Supabase
- * 4. Set up realtime subscriptions for multi-user sync
+ * 3. If Supabase is genuinely empty (not timed out) → seed from localStorage/seed data, push to Supabase
+ * 4. If Supabase timed out → use localStorage as-is, NEVER overwrite Supabase
+ * 5. Set up realtime subscriptions for multi-user sync
  */
+
+const TIMEOUT = Symbol('TIMEOUT');
+
 function useSupabaseInit() {
   const [ready, setReady] = useState(false);
 
@@ -31,44 +35,52 @@ function useSupabaseInit() {
 
     async function init() {
       try {
-        // Fetch all data from Supabase in parallel, with a 5s timeout
-        const withTimeout = <T,>(p: Promise<T>, fallback: T): Promise<T> =>
-          Promise.race([p, new Promise<T>((resolve) => setTimeout(() => resolve(fallback), 5000))]);
+        // Fetch all data from Supabase in parallel, with a 10s timeout.
+        // IMPORTANT: timeout returns TIMEOUT sentinel (not null) so we can
+        // distinguish "Supabase returned empty" from "fetch never completed".
+        // We must NEVER push stale localStorage data to Supabase on timeout.
+        const withTimeout = <T,>(p: Promise<T>): Promise<T | typeof TIMEOUT> =>
+          Promise.race([p, new Promise<T | typeof TIMEOUT>((resolve) => setTimeout(() => resolve(TIMEOUT), 10000))]);
 
         const [
-          forecastData,
-          financialData,
-          syncData,
-          hiringData,
-          staffingData,
-          pipelineData,
+          forecastResult,
+          financialResult,
+          syncResult,
+          hiringResult,
+          staffingResult,
+          pipelineResult,
         ] = await Promise.all([
-          withTimeout(fetchAssignments(), null),
-          withTimeout(fetchFinancialSettings(), null),
-          withTimeout(fetchSyncConfig(), null),
-          withTimeout(fetchHiringForecastConfig(), null),
-          withTimeout(fetchStaffingRequests(), null),
-          withTimeout(fetchPipelineProjects(), null),
+          withTimeout(fetchAssignments()),
+          withTimeout(fetchFinancialSettings()),
+          withTimeout(fetchSyncConfig()),
+          withTimeout(fetchHiringForecastConfig()),
+          withTimeout(fetchStaffingRequests()),
+          withTimeout(fetchPipelineProjects()),
         ]);
 
+        const timedOut = (v: unknown) => v === TIMEOUT;
+
         // --- Forecast assignments ---
-        if (forecastData && forecastData.assignments.length > 0) {
-          // Supabase has data — use it
+        if (!timedOut(forecastResult) && forecastResult && (forecastResult as Awaited<ReturnType<typeof fetchAssignments>>).assignments.length > 0) {
+          const forecastData = forecastResult as Awaited<ReturnType<typeof fetchAssignments>>;
+          // Supabase has data — use it (overrides localStorage)
           useForecastStore.setState({
             assignments: forecastData.assignments,
             weekDates: forecastData.weekDates,
           });
+          console.log('[supabase] Loaded', forecastData.assignments.length, 'assignments from Supabase');
+        } else if (timedOut(forecastResult)) {
+          // Timed out — use localStorage as-is, do NOT push to Supabase
+          console.warn('[supabase] Forecast fetch timed out — using localStorage, not overwriting Supabase');
         } else {
-          // Supabase is empty — check localStorage, then seed data
+          // Supabase is genuinely empty — seed from localStorage or seed data, then push
+          console.log('[supabase] Supabase is empty — seeding...');
           const localAssignments = useForecastStore.getState().assignments;
           if (localAssignments.length > 0) {
-            // Ensure all have ids
             const withIds = localAssignments.map((a) => (a.id ? a : { ...a, id: nanoid() }));
             useForecastStore.setState({ assignments: withIds });
-            // Push local data to Supabase
             await db.replaceAllAssignments(withIds, useForecastStore.getState().weekDates);
           } else {
-            // Load seed data
             const seedAssignments = buildSeedAssignments();
             useForecastStore.setState({ assignments: seedAssignments, weekDates: [] });
             await db.replaceAllAssignments(seedAssignments, []);
@@ -76,52 +88,60 @@ function useSupabaseInit() {
         }
 
         // --- Financial settings ---
-        if (financialData) {
-          useFinancialStore.setState({ settings: financialData });
-        } else {
-          // Push current settings to Supabase
+        if (!timedOut(financialResult) && financialResult) {
+          useFinancialStore.setState({ settings: financialResult as Awaited<ReturnType<typeof fetchFinancialSettings>> });
+        } else if (!timedOut(financialResult)) {
           db.saveFinancialSettings(useFinancialStore.getState().settings);
         }
 
         // --- Sync config ---
-        if (syncData) {
-          useSyncStore.setState(syncData);
+        if (!timedOut(syncResult) && syncResult) {
+          useSyncStore.setState(syncResult as Awaited<ReturnType<typeof fetchSyncConfig>>);
         }
 
         // --- Hiring forecast ---
-        if (hiringData && hiringData.scenarioSettings?.targetUtilization) {
-          useHiringForecastStore.setState({
-            conciergeConfig: hiringData.conciergeConfig,
-            scenarioSettings: hiringData.scenarioSettings,
-          });
-        } else {
-          const s = useHiringForecastStore.getState();
-          db.saveHiringConfig(s.conciergeConfig, s.scenarioSettings);
+        if (!timedOut(hiringResult) && hiringResult) {
+          const hiringData = hiringResult as Awaited<ReturnType<typeof fetchHiringForecastConfig>>;
+          if (hiringData?.scenarioSettings?.targetUtilization) {
+            useHiringForecastStore.setState({
+              conciergeConfig: hiringData.conciergeConfig,
+              scenarioSettings: hiringData.scenarioSettings,
+            });
+          } else {
+            const s = useHiringForecastStore.getState();
+            db.saveHiringConfig(s.conciergeConfig, s.scenarioSettings);
+          }
         }
 
         // --- Staffing requests ---
-        if (staffingData && staffingData.length > 0) {
-          useHiringForecastStore.setState({ staffingRequests: staffingData });
-        } else {
-          // Push any existing staffing requests to Supabase
-          const existing = useHiringForecastStore.getState().staffingRequests;
-          for (const r of existing) {
-            db.insertStaffingRequest(r);
+        if (!timedOut(staffingResult) && staffingResult) {
+          const staffingData = staffingResult as Awaited<ReturnType<typeof fetchStaffingRequests>>;
+          if (staffingData && staffingData.length > 0) {
+            useHiringForecastStore.setState({ staffingRequests: staffingData });
+          } else {
+            const existing = useHiringForecastStore.getState().staffingRequests;
+            for (const r of existing) {
+              db.insertStaffingRequest(r);
+            }
           }
         }
 
         // --- Pipeline projects ---
-        if (pipelineData && pipelineData.length > 0) {
-          usePipelineStore.setState({ projects: pipelineData });
-        } else {
-          // Seed with Zoho data if localStorage is also empty
-          const localProjects = usePipelineStore.getState().projects;
-          if (localProjects.length === 0) {
-            usePipelineStore.setState({ projects: ZOHO_SEED_PROJECTS });
-            await db.replacePipelineProjects(ZOHO_SEED_PROJECTS);
+        if (!timedOut(pipelineResult) && pipelineResult) {
+          const pipelineData = pipelineResult as Awaited<ReturnType<typeof fetchPipelineProjects>>;
+          if (pipelineData && pipelineData.length > 0) {
+            usePipelineStore.setState({ projects: pipelineData });
           } else {
-            await db.replacePipelineProjects(localProjects);
+            const localProjects = usePipelineStore.getState().projects;
+            if (localProjects.length === 0) {
+              usePipelineStore.setState({ projects: ZOHO_SEED_PROJECTS });
+              await db.replacePipelineProjects(ZOHO_SEED_PROJECTS);
+            } else {
+              await db.replacePipelineProjects(localProjects);
+            }
           }
+        } else if (timedOut(pipelineResult)) {
+          console.warn('[supabase] Pipeline fetch timed out — using localStorage');
         }
 
         // Set up realtime subscriptions
