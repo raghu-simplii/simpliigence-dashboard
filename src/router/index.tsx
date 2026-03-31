@@ -8,6 +8,7 @@ import ForecastingPage from '../pages/ForecastingPage';
 import FinancialsPage from '../pages/FinancialsPage';
 import SettingsPage from '../pages/SettingsPage';
 import HiringForecastPage from '../pages/HiringForecastPage';
+import ConciergePage from '../pages/ConciergePage';
 
 export const router = createBrowserRouter(
   [
@@ -22,6 +23,7 @@ export const router = createBrowserRouter(
         { path: 'forecasting', element: <ForecastingPage /> },
         { path: 'hiring-forecast', element: <HiringForecastPage /> },
         { path: 'financials', element: <FinancialsPage /> },
+        { path: 'concierge', element: <ConciergePage /> },
         { path: 'settings', element: <SettingsPage /> },
       ],
     },

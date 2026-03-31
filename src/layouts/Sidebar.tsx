@@ -8,6 +8,7 @@ import {
   DollarSign,
   UserPlus,
   Settings,
+  Headset,
   Zap,
 } from 'lucide-react';
 
@@ -19,6 +20,7 @@ const navItems = [
   { to: '/forecasting', icon: CalendarDays, label: 'Forecasting' },
   { to: '/hiring-forecast', icon: UserPlus, label: 'Hiring Forecast' },
   { to: '/financials', icon: DollarSign, label: 'Financials' },
+  { to: '/concierge', icon: Headset, label: 'Concierge' },
 ];
 
 export function Sidebar() {
