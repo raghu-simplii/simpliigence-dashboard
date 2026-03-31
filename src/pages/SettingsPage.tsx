@@ -1,11 +1,10 @@
-import { useForecastStore, useFinancialStore, useSyncStore } from '../store';
+import { useForecastStore, useFinancialStore } from '../store';
 import { Button, Card } from '../components/ui';
 import { PageHeader } from '../components/shared/PageHeader';
-import { Download, Trash2, X, FileSpreadsheet, RefreshCw, CloudDownload, Check, AlertCircle, Brain } from 'lucide-react';
+import { Download, Trash2, FileSpreadsheet, Check, Brain } from 'lucide-react';
 import { loadSeedIntoStores } from '../data/employeeSeed';
 import { useState } from 'react';
 import { ConfirmDialog } from '../components/ui';
-import { performSync } from '../lib/syncOneDrive';
 import { deriveEmployeeSummaries, deriveProjectSummaries } from '../lib/parseSpreadsheet';
 import { db } from '../lib/supabaseSync';
 import { getClaudeApiKey, setClaudeApiKey } from '../lib/claudeQuery';
@@ -16,24 +15,11 @@ export default function SettingsPage() {
   const { settings, updateSettings } = financialStore;
   const [confirmClear, setConfirmClear] = useState(false);
   const [confirmSeed, setConfirmSeed] = useState(false);
-  const syncStore = useSyncStore();
   const [claudeKey, setClaudeKey] = useState(getClaudeApiKey());
   const [keyVisible, setKeyVisible] = useState(false);
 
   const employees = deriveEmployeeSummaries(forecastStore.assignments);
   const projects = deriveProjectSummaries(forecastStore.assignments);
-
-  const handleSync = async () => {
-    await performSync();
-  };
-
-  const timeSince = (iso: string) => {
-    const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-    if (seconds < 60) return 'just now';
-    if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-    return new Date(iso).toLocaleDateString();
-  };
 
   const exportData = () => {
     const data = {
@@ -68,79 +54,6 @@ export default function SettingsPage() {
       <PageHeader title="Settings" subtitle="Manage data sync and configuration." />
 
       <div className="max-w-3xl space-y-6">
-        {/* Dropbox Spreadsheet Sync */}
-        <Card title="Live Spreadsheet">
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Dropbox or OneDrive Share Link</label>
-              <p className="text-xs text-slate-500 mb-2">Dropbox recommended. Right-click the file &rarr; "Copy link" and paste below.</p>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  placeholder="https://www.dropbox.com/scl/fi/... or https://1drv.ms/x/..."
-                  value={syncStore.oneDriveUrl}
-                  onChange={(e) => syncStore.setOneDriveUrl(e.target.value)}
-                />
-                {syncStore.oneDriveUrl && (
-                  <button onClick={() => syncStore.clearConfig()} className="text-slate-400 hover:text-red-500 px-2" title="Clear URL">
-                    <X size={16} />
-                  </button>
-                )}
-              </div>
-            </div>
-            <div className="flex items-end gap-4">
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Sheet Name</label>
-                <input
-                  type="text"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  value={syncStore.sheetName}
-                  onChange={(e) => syncStore.setSheetName(e.target.value)}
-                />
-              </div>
-              <label className="flex items-center gap-2 pb-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="rounded border-slate-300 text-primary focus:ring-primary/50"
-                  checked={syncStore.autoSyncOnLoad}
-                  onChange={(e) => syncStore.setAutoSync(e.target.checked)}
-                />
-                <span className="text-sm text-slate-600">Auto-sync on load</span>
-              </label>
-            </div>
-            <div className="flex items-center justify-between border-t border-slate-100 pt-4">
-              <div className="flex items-center gap-2">
-                {syncStore.lastSyncStatus === 'success' && (
-                  <>
-                    <Check size={14} className="text-emerald-500" />
-                    <span className="text-sm text-emerald-700">
-                      Synced {syncStore.lastSyncAt ? timeSince(syncStore.lastSyncAt) : ''}.{' '}
-                      {syncStore.lastSyncRowCount} assignments &rarr; {syncStore.lastSyncMemberCount} employees, {syncStore.lastSyncProjectCount} projects
-                    </span>
-                  </>
-                )}
-                {syncStore.lastSyncStatus === 'error' && (
-                  <>
-                    <AlertCircle size={14} className="text-red-500" />
-                    <span className="text-sm text-red-600">{syncStore.lastSyncError}</span>
-                  </>
-                )}
-                {syncStore.lastSyncStatus === 'never' && (
-                  <span className="text-sm text-slate-400">Not synced yet. Paste a share URL and click Sync Now.</span>
-                )}
-              </div>
-              <Button size="sm" onClick={handleSync} disabled={!syncStore.oneDriveUrl || syncStore.isSyncing}>
-                {syncStore.isSyncing ? (
-                  <><RefreshCw size={14} className="animate-spin" /> Syncing&hellip;</>
-                ) : (
-                  <><CloudDownload size={14} /> Sync Now</>
-                )}
-              </Button>
-            </div>
-          </div>
-        </Card>
-
         <Card title="Data Overview">
           <div className="space-y-3">
             <div className="flex items-center justify-between py-2 border-b border-slate-50">
