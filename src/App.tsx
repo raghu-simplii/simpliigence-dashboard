@@ -25,7 +25,15 @@ import {
  * 5. Set up realtime subscriptions for multi-user sync
  */
 
-const TIMEOUT = Symbol('TIMEOUT');
+/** Wrapper: resolves to { value, timedOut: false } or { value: undefined, timedOut: true } */
+async function withTimeout<T>(p: Promise<T>, ms = 10000): Promise<{ value: T; timedOut: false } | { value: undefined; timedOut: true }> {
+  return Promise.race([
+    p.then((value) => ({ value, timedOut: false as const })),
+    new Promise<{ value: undefined; timedOut: true }>((resolve) =>
+      setTimeout(() => resolve({ value: undefined, timedOut: true }), ms),
+    ),
+  ]);
+}
 
 function useSupabaseInit() {
   const [ready, setReady] = useState(false);
@@ -35,20 +43,13 @@ function useSupabaseInit() {
 
     async function init() {
       try {
-        // Fetch all data from Supabase in parallel, with a 10s timeout.
-        // IMPORTANT: timeout returns TIMEOUT sentinel (not null) so we can
-        // distinguish "Supabase returned empty" from "fetch never completed".
-        // We must NEVER push stale localStorage data to Supabase on timeout.
-        const withTimeout = <T,>(p: Promise<T>): Promise<T | typeof TIMEOUT> =>
-          Promise.race([p, new Promise<T | typeof TIMEOUT>((resolve) => setTimeout(() => resolve(TIMEOUT), 10000))]);
-
         const [
-          forecastResult,
-          financialResult,
-          syncResult,
-          hiringResult,
-          staffingResult,
-          pipelineResult,
+          forecastRes,
+          financialRes,
+          syncRes,
+          hiringRes,
+          staffingRes,
+          pipelineRes,
         ] = await Promise.all([
           withTimeout(fetchAssignments()),
           withTimeout(fetchFinancialSettings()),
@@ -58,54 +59,54 @@ function useSupabaseInit() {
           withTimeout(fetchPipelineProjects()),
         ]);
 
-        const timedOut = (v: unknown) => v === TIMEOUT;
-
         // --- Forecast assignments ---
-        if (!timedOut(forecastResult) && forecastResult && (forecastResult as Awaited<ReturnType<typeof fetchAssignments>>).assignments.length > 0) {
-          const forecastData = forecastResult as Awaited<ReturnType<typeof fetchAssignments>>;
-          // Supabase has data — use it (overrides localStorage)
-          useForecastStore.setState({
-            assignments: forecastData.assignments,
-            weekDates: forecastData.weekDates,
-          });
-          console.log('[supabase] Loaded', forecastData.assignments.length, 'assignments from Supabase');
-        } else if (timedOut(forecastResult)) {
-          // Timed out — use localStorage as-is, do NOT push to Supabase
-          console.warn('[supabase] Forecast fetch timed out — using localStorage, not overwriting Supabase');
-        } else {
-          // Supabase is genuinely empty — seed from localStorage or seed data, then push
-          console.log('[supabase] Supabase is empty — seeding...');
-          const localAssignments = useForecastStore.getState().assignments;
-          if (localAssignments.length > 0) {
-            const withIds = localAssignments.map((a) => (a.id ? a : { ...a, id: nanoid() }));
-            useForecastStore.setState({ assignments: withIds });
-            await db.replaceAllAssignments(withIds, useForecastStore.getState().weekDates);
+        if (!forecastRes.timedOut) {
+          const forecastData = forecastRes.value;
+          if (forecastData && forecastData.assignments.length > 0) {
+            useForecastStore.setState({
+              assignments: forecastData.assignments,
+              weekDates: forecastData.weekDates,
+            });
+            console.log('[supabase] Loaded', forecastData.assignments.length, 'assignments from Supabase');
           } else {
-            const seedAssignments = buildSeedAssignments();
-            useForecastStore.setState({ assignments: seedAssignments, weekDates: [] });
-            await db.replaceAllAssignments(seedAssignments, []);
+            // Supabase is genuinely empty — seed
+            console.log('[supabase] Supabase is empty — seeding...');
+            const localAssignments = useForecastStore.getState().assignments;
+            if (localAssignments.length > 0) {
+              const withIds = localAssignments.map((a) => (a.id ? a : { ...a, id: nanoid() }));
+              useForecastStore.setState({ assignments: withIds });
+              await db.replaceAllAssignments(withIds, useForecastStore.getState().weekDates);
+            } else {
+              const seedAssignments = buildSeedAssignments();
+              useForecastStore.setState({ assignments: seedAssignments, weekDates: [] });
+              await db.replaceAllAssignments(seedAssignments, []);
+            }
           }
+        } else {
+          console.warn('[supabase] Forecast fetch timed out — using localStorage, not overwriting Supabase');
         }
 
         // --- Financial settings ---
-        if (!timedOut(financialResult) && financialResult) {
-          useFinancialStore.setState({ settings: financialResult as Awaited<ReturnType<typeof fetchFinancialSettings>> });
-        } else if (!timedOut(financialResult)) {
-          db.saveFinancialSettings(useFinancialStore.getState().settings);
+        if (!financialRes.timedOut) {
+          if (financialRes.value) {
+            useFinancialStore.setState({ settings: financialRes.value });
+          } else {
+            db.saveFinancialSettings(useFinancialStore.getState().settings);
+          }
         }
 
         // --- Sync config ---
-        if (!timedOut(syncResult) && syncResult) {
-          useSyncStore.setState(syncResult as Awaited<ReturnType<typeof fetchSyncConfig>>);
+        if (!syncRes.timedOut && syncRes.value) {
+          useSyncStore.setState(syncRes.value as unknown as Partial<ReturnType<typeof useSyncStore.getState>>);
         }
 
         // --- Hiring forecast ---
-        if (!timedOut(hiringResult) && hiringResult) {
-          const hiringData = hiringResult as Awaited<ReturnType<typeof fetchHiringForecastConfig>>;
-          if (hiringData?.scenarioSettings?.targetUtilization) {
+        if (!hiringRes.timedOut && hiringRes.value) {
+          const hd = hiringRes.value;
+          if (hd.scenarioSettings?.targetUtilization) {
             useHiringForecastStore.setState({
-              conciergeConfig: hiringData.conciergeConfig,
-              scenarioSettings: hiringData.scenarioSettings,
+              conciergeConfig: hd.conciergeConfig,
+              scenarioSettings: hd.scenarioSettings,
             });
           } else {
             const s = useHiringForecastStore.getState();
@@ -114,10 +115,10 @@ function useSupabaseInit() {
         }
 
         // --- Staffing requests ---
-        if (!timedOut(staffingResult) && staffingResult) {
-          const staffingData = staffingResult as Awaited<ReturnType<typeof fetchStaffingRequests>>;
-          if (staffingData && staffingData.length > 0) {
-            useHiringForecastStore.setState({ staffingRequests: staffingData });
+        if (!staffingRes.timedOut) {
+          const sd = staffingRes.value;
+          if (sd && sd.length > 0) {
+            useHiringForecastStore.setState({ staffingRequests: sd });
           } else {
             const existing = useHiringForecastStore.getState().staffingRequests;
             for (const r of existing) {
@@ -127,10 +128,10 @@ function useSupabaseInit() {
         }
 
         // --- Pipeline projects ---
-        if (!timedOut(pipelineResult) && pipelineResult) {
-          const pipelineData = pipelineResult as Awaited<ReturnType<typeof fetchPipelineProjects>>;
-          if (pipelineData && pipelineData.length > 0) {
-            usePipelineStore.setState({ projects: pipelineData });
+        if (!pipelineRes.timedOut) {
+          const pd = pipelineRes.value;
+          if (pd && pd.length > 0) {
+            usePipelineStore.setState({ projects: pd });
           } else {
             const localProjects = usePipelineStore.getState().projects;
             if (localProjects.length === 0) {
@@ -140,7 +141,7 @@ function useSupabaseInit() {
               await db.replacePipelineProjects(localProjects);
             }
           }
-        } else if (timedOut(pipelineResult)) {
+        } else {
           console.warn('[supabase] Pipeline fetch timed out — using localStorage');
         }
 
