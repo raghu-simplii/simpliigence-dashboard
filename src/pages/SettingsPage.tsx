@@ -1,13 +1,14 @@
 import { useForecastStore, useFinancialStore, useSyncStore } from '../store';
 import { Button, Card } from '../components/ui';
 import { PageHeader } from '../components/shared/PageHeader';
-import { Download, Trash2, X, FileSpreadsheet, RefreshCw, CloudDownload, Check, AlertCircle } from 'lucide-react';
+import { Download, Trash2, X, FileSpreadsheet, RefreshCw, CloudDownload, Check, AlertCircle, Brain } from 'lucide-react';
 import { loadSeedIntoStores } from '../data/employeeSeed';
 import { useState } from 'react';
 import { ConfirmDialog } from '../components/ui';
 import { performSync } from '../lib/syncOneDrive';
 import { deriveEmployeeSummaries, deriveProjectSummaries } from '../lib/parseSpreadsheet';
 import { db } from '../lib/supabaseSync';
+import { getClaudeApiKey, setClaudeApiKey } from '../lib/claudeQuery';
 
 export default function SettingsPage() {
   const forecastStore = useForecastStore();
@@ -16,6 +17,8 @@ export default function SettingsPage() {
   const [confirmClear, setConfirmClear] = useState(false);
   const [confirmSeed, setConfirmSeed] = useState(false);
   const syncStore = useSyncStore();
+  const [claudeKey, setClaudeKey] = useState(getClaudeApiKey());
+  const [keyVisible, setKeyVisible] = useState(false);
 
   const employees = deriveEmployeeSummaries(forecastStore.assignments);
   const projects = deriveProjectSummaries(forecastStore.assignments);
@@ -190,6 +193,62 @@ export default function SettingsPage() {
             </div>
             <div className="border-t border-slate-100 pt-3 text-xs text-slate-400">
               <p>Quick reference: CA$100,000 = ${Math.round(100000 * (settings.cadToUsdRate || 0.73)).toLocaleString()} USD = ₹{Math.round(100000 * (settings.cadToUsdRate || 0.73) * (settings.exchangeRate || 83.5)).toLocaleString()} INR</p>
+            </div>
+          </div>
+        </Card>
+
+        <Card title="AI Smart Query">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Brain size={16} className="text-blue-600" />
+              <p className="text-sm text-slate-600">Power the Dashboard Smart Query with Claude AI for accurate, natural-language answers.</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Anthropic API Key</label>
+              <p className="text-xs text-slate-400 mb-2">Stored locally in your browser only — never sent to Supabase or any server except Anthropic.</p>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type={keyVisible ? 'text' : 'password'}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    placeholder="sk-ant-..."
+                    value={claudeKey}
+                    onChange={(e) => setClaudeKey(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setKeyVisible(!keyVisible)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600"
+                  >
+                    {keyVisible ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setClaudeApiKey(claudeKey);
+                  }}
+                >
+                  Save
+                </Button>
+                {getClaudeApiKey() && (
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    onClick={() => {
+                      setClaudeApiKey('');
+                      setClaudeKey('');
+                    }}
+                  >
+                    Remove
+                  </Button>
+                )}
+              </div>
+              {getClaudeApiKey() && (
+                <p className="text-xs text-emerald-600 mt-2 flex items-center gap-1">
+                  <Check size={12} /> API key configured — Smart Query is AI-powered.
+                </p>
+              )}
             </div>
           </div>
         </Card>

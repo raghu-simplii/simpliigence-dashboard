@@ -1,11 +1,12 @@
 import { useMemo, useState, useRef, useCallback } from 'react';
-import { Users, FolderKanban, Clock, DollarSign, Search, Sparkles, X } from 'lucide-react';
+import { Users, FolderKanban, Clock, DollarSign, Search, Sparkles, X, Loader2 } from 'lucide-react';
 import { useForecastStore } from '../store';
 import { StatCard, Card } from '../components/ui';
 import { PageHeader } from '../components/shared/PageHeader';
 import { deriveEmployeeSummaries, deriveProjectSummaries } from '../lib/parseSpreadsheet';
 import { runQuery, SUGGESTED_QUERIES } from '../lib/queryEngine';
 import type { QueryResult } from '../lib/queryEngine';
+import { runClaudeQuery, getClaudeApiKey } from '../lib/claudeQuery';
 import { MONTHS } from '../types/forecast';
 import type { ForecastAssignment } from '../types/forecast';
 import { CHART_COLORS } from '../constants/brand';
@@ -20,18 +21,33 @@ const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b
 function SmartQueryPanel({ assignments }: { assignments: ForecastAssignment[] }) {
   const [query, setQuery] = useState('');
   const [result, setResult] = useState<QueryResult | null>(null);
+  const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const hasClaude = !!getClaudeApiKey();
 
-  const handleSubmit = useCallback((q?: string) => {
+  const handleSubmit = useCallback(async (q?: string) => {
     const text = q ?? query;
     if (!text.trim()) return;
     setQuery(text);
-    setResult(runQuery(text, assignments as any));
+
+    if (getClaudeApiKey()) {
+      setLoading(true);
+      setResult(null);
+      try {
+        const res = await runClaudeQuery(text, assignments);
+        setResult(res);
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      setResult(runQuery(text, assignments as any));
+    }
   }, [query, assignments]);
 
   const handleClear = () => {
     setQuery('');
     setResult(null);
+    setLoading(false);
     inputRef.current?.focus();
   };
 
@@ -41,7 +57,10 @@ function SmartQueryPanel({ assignments }: { assignments: ForecastAssignment[] })
         <div className="flex items-center gap-2 mb-3">
           <Sparkles size={18} className="text-blue-600" />
           <span className="text-sm font-semibold text-blue-800">Smart Query</span>
-          <span className="text-xs text-blue-500">Ask anything about your team, capacity, or projects</span>
+          {hasClaude
+            ? <span className="text-xs text-blue-500">Powered by Claude AI — ask anything about your data</span>
+            : <span className="text-xs text-blue-500">Add your Claude API key in Settings for AI-powered answers</span>
+          }
         </div>
 
         <form
@@ -87,8 +106,16 @@ function SmartQueryPanel({ assignments }: { assignments: ForecastAssignment[] })
           </div>
         )}
 
+        {/* Loading */}
+        {loading && (
+          <div className="mt-4 bg-white rounded-lg border border-blue-100 p-6 flex items-center justify-center gap-3">
+            <Loader2 size={18} className="text-blue-500 animate-spin" />
+            <span className="text-sm text-slate-500">Claude is thinking...</span>
+          </div>
+        )}
+
         {/* Result */}
-        {result && (
+        {result && !loading && (
           <div className="mt-4 bg-white rounded-lg border border-blue-100 p-4">
             <div className="prose prose-sm max-w-none text-slate-700 [&_strong]:text-slate-900">
               {result.answer.split('\n').map((line, i) => (
