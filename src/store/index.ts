@@ -5,3 +5,5 @@ export { useHiringForecastStore } from './useHiringForecastStore';
 export { usePipelineStore } from './usePipelineStore';
 export { useConciergeStore } from './useConciergeStore';
 export { useStaffingStore } from './useStaffingStore';
+export { useUSStaffingStore } from './useUSStaffingStore';
+export { useOpenBenchStore } from './useOpenBenchStore';
