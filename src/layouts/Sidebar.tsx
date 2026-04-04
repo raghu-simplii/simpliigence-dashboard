@@ -13,6 +13,8 @@ import {
   PanelLeftClose,
   ClipboardList,
   PanelLeftOpen,
+  Globe,
+  UserCheck,
 } from 'lucide-react';
 
 const navItems = [
@@ -25,6 +27,8 @@ const navItems = [
   { to: '/financials', icon: DollarSign, label: 'Financials' },
   { to: '/concierge', icon: Headset, label: 'Concierge' },
   { to: '/india-staffing', icon: ClipboardList, label: 'India Staffing' },
+  { to: '/us-staffing', icon: Globe, label: 'US Staffing' },
+  { to: '/open-bench', icon: UserCheck, label: 'Open Bench' },
 ];
 
 interface SidebarProps {
