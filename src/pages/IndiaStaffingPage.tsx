@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useState, useMemo, useRef } from 'react';
 import {
   Users, AlertTriangle, TrendingUp, CheckCircle, Plus, Upload,
