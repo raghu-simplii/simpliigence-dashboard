@@ -11,6 +11,7 @@ import {
   Headset,
   Zap,
   PanelLeftClose,
+  ClipboardList,
   PanelLeftOpen,
 } from 'lucide-react';
 
