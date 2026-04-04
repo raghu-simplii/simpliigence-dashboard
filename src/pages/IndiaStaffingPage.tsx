@@ -202,10 +202,10 @@ export default function IndiaStaffingPage() {
       {activeTab === 'overview' && (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <StatCard label="Total Open Positions" value={totalPos} icon={Users} description={`${filtered.length} requisitions`} />
-            <StatCard label="Closed / Onboarding" value={closedCount} icon={CheckCircle} description={`${closedRows.length} progressing`} variant="success" />
-            <StatCard label="High Risk" value={highRiskCount} icon={AlertTriangle} description={`${filtered.filter((r) => r.risk === 'medium').length} medium`} variant="danger" />
-            <StatCard label="Avg Closure Prob" value={`${avgProb}%`} icon={TrendingUp} description="AI-scored" variant="warning" />
+            <StatCard label="Total Open Positions" value={totalPos} icon={<Users size={20} />} subtitle={`${filtered.length} requisitions`} />
+            <StatCard label="Closed / Onboarding" value={closedCount} icon={<CheckCircle size={20} />} subtitle={`${closedRows.length} progressing`} />
+            <StatCard label="High Risk" value={highRiskCount} icon={<AlertTriangle size={20} />} subtitle={`${filtered.filter((r) => r.risk === 'medium').length} medium`} />
+            <StatCard label="Avg Closure Prob" value={`${avgProb}%`} icon={<TrendingUp size={20} />} subtitle="AI-scored" />
           </div>
 
           {/* Table */}
