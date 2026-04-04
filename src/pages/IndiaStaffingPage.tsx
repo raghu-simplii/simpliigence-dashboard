@@ -6,13 +6,12 @@ import {
 import { useStaffingStore } from '../store/useStaffingStore';
 import { analyzeStaffingStatus } from '../lib/staffingAnalysis';
 import { PageHeader } from '../components/shared/PageHeader';
-import { Card, StatCard, Badge, StatusBadge, Button, Input, Select, Textarea } from '../components/ui';
-import { Drawer } from '../components/ui';
-import type { StaffingRow, RiskLevel, PipelineStage, MONTHS } from '../types/staffing';
+import { Card, StatCard, StatusBadge } from '../components/ui';
+import type { StaffingRow, RiskLevel, PipelineStage } from '../types/staffing';
 import { STAGE_COLORS } from '../types/staffing';
 
 /* ââ helpers ââ */
-const riskColor = (r: RiskLevel) => r === 'high' ? 'red' : r === 'medium' ? 'yellow' : 'green';
+const _riskColor = (r: RiskLevel) => r === 'high' ? 'red' : r === 'medium' ? 'yellow' : 'green';
 const probColor = (p: number) => p >= 65 ? '#10b981' : p >= 40 ? '#f59e0b' : '#ef4444';
 
 export default function IndiaStaffingPage() {
