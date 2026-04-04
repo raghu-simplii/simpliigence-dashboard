@@ -24,6 +24,7 @@ const navItems = [
   { to: '/hiring-forecast', icon: UserPlus, label: 'Hiring Forecast' },
   { to: '/financials', icon: DollarSign, label: 'Financials' },
   { to: '/concierge', icon: Headset, label: 'Concierge' },
+  { to: '/india-staffing', icon: ClipboardList, label: 'India Staffing' },
 ];
 
 interface SidebarProps {
