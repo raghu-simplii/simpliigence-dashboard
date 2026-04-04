@@ -10,6 +10,8 @@ import SettingsPage from '../pages/SettingsPage';
 import HiringForecastPage from '../pages/HiringForecastPage';
 import ConciergePage from '../pages/ConciergePage';
 import IndiaStaffingPage from '../pages/IndiaStaffingPage';
+import USStaffingPage from '../pages/USStaffingPage';
+import OpenBenchPage from '../pages/OpenBenchPage';
 
 export const router = createBrowserRouter(
   [
@@ -26,7 +28,9 @@ export const router = createBrowserRouter(
         { path: 'financials', element: <FinancialsPage /> },
         { path: 'concierge', element: <ConciergePage /> },
         { path: 'settings', element: <SettingsPage /> },
-          { path: 'india-staffing', element: <IndiaStaffingPage /> },
+        { path: 'india-staffing', element: <IndiaStaffingPage /> },
+        { path: 'us-staffing', element: <USStaffingPage /> },
+        { path: 'open-bench', element: <OpenBenchPage /> },
       ],
     },
   ],
