@@ -154,3 +154,64 @@ CREATE POLICY "Allow all" ON staffing_requests FOR ALL USING (true) WITH CHECK (
 
 ALTER TABLE pipeline_projects ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow all" ON pipeline_projects FOR ALL USING (true) WITH CHECK (true);
+
+
+-- ============================================================
+-- 8. staffing_accounts — India Staffing client accounts
+-- ============================================================
+CREATE TABLE staffing_accounts (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_sa_name ON staffing_accounts(name);
+
+-- ============================================================
+-- 9. staffing_requisitions — open positions per account
+-- ============================================================
+CREATE TABLE staffing_requisitions (
+  id TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL REFERENCES staffing_accounts(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  month TEXT NOT NULL,
+  new_positions INTEGER DEFAULT 0,
+  backfills INTEGER DEFAULT 0,
+  expected_closure TEXT DEFAULT '',
+  anticipation TEXT DEFAULT '',
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_sr_account ON staffing_requisitions(account_id);
+CREATE INDEX idx_sr_month ON staffing_requisitions(month);
+
+-- ============================================================
+-- 10. staffing_daily_statuses — rolling daily status updates
+-- ============================================================
+CREATE TABLE staffing_daily_statuses (
+  id TEXT PRIMARY KEY,
+  requisition_id TEXT NOT NULL REFERENCES staffing_requisitions(id) ON DELETE CASCADE,
+  status_date TEXT NOT NULL,
+  status_text TEXT NOT NULL DEFAULT '',
+  anticipation TEXT DEFAULT '',
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_sds_req ON staffing_daily_statuses(requisition_id);
+CREATE INDEX idx_sds_date ON staffing_daily_statuses(status_date);
+
+-- Enable Realtime for India Staffing tables
+ALTER PUBLICATION supabase_realtime ADD TABLE staffing_accounts;
+ALTER PUBLICATION supabase_realtime ADD TABLE staffing_requisitions;
+ALTER PUBLICATION supabase_realtime ADD TABLE staffing_daily_statuses;
+
+-- RLS for India Staffing tables
+ALTER TABLE staffing_accounts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all" ON staffing_accounts FOR ALL USING (true) WITH CHECK (true);
+
+ALTER TABLE staffing_requisitions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all" ON staffing_requisitions FOR ALL USING (true) WITH CHECK (true);
+
+ALTER TABLE staffing_daily_statuses ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all" ON staffing_daily_statuses FOR ALL USING (true) WITH CHECK (true);
