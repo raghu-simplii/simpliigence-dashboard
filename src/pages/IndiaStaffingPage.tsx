@@ -1,8 +1,8 @@
 // @ts-nocheck
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import {
   Users, AlertTriangle, TrendingUp, CheckCircle, Plus, Upload,
-  Download, Brain, Clock, BarChart3, Building2,
+  Download, Brain, Clock, BarChart3, Building2, Pencil, Trash2, Save, X, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { useStaffingStore } from '../store/useStaffingStore';
 import { analyzeStaffingStatus } from '../lib/staffingAnalysis';
@@ -11,23 +11,118 @@ import { Card, StatCard, StatusBadge } from '../components/ui';
 import type { StaffingRow, RiskLevel, PipelineStage } from '../types/staffing';
 import { STAGE_COLORS } from '../types/staffing';
 
-/* ââ helpers ââ */
-const _riskColor = (r: RiskLevel) => r === 'high' ? 'red' : r === 'medium' ? 'yellow' : 'green';
+/* ââ helpers ââ */
 const probColor = (p: number) => p >= 65 ? '#10b981' : p >= 40 ? '#f59e0b' : '#ef4444';
 
+const PIPELINE_STAGES: PipelineStage[] = ['Sourcing','Profiles Shared','Interview','Shortlisted','Client Round','Closed/Selected','Onboarding'];
+const ALL_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+/* ââ Editable Cell Component ââ */
+function EditableCell({ value, onSave, type = 'text', options, className = '', displayContent }: {
+  value: string | number;
+  onSave: (val: string | number) => void;
+  type?: 'text' | 'number' | 'select' | 'textarea';
+  options?: string[];
+  className?: string;
+  displayContent?: React.ReactNode;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const inputRef = useRef<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      if ('select' in inputRef.current && type !== 'select') inputRef.current.select();
+    }
+  }, [editing]);
+
+  const commit = () => {
+    const final = type === 'number' ? Number(draft) : draft;
+    if (final !== value) onSave(final);
+    setEditing(false);
+  };
+
+  const cancel = () => { setDraft(value); setEditing(false); };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && type !== 'textarea') commit();
+    if (e.key === 'Escape') cancel();
+  };
+
+  if (!editing) {
+    return (
+      <div
+        className={`group cursor-pointer rounded px-1 -mx-1 hover:bg-blue-50 hover:ring-1 hover:ring-blue-200 transition-all min-h-[24px] flex items-center ${className}`}
+        onClick={() => { setDraft(value); setEditing(true); }}
+        title="Click to edit"
+      >
+        {displayContent || <span>{value}</span>}
+        <Pencil size={10} className="ml-1 opacity-0 group-hover:opacity-40 flex-shrink-0" />
+      </div>
+    );
+  }
+
+  if (type === 'select' && options) {
+    return (
+      <select
+        ref={inputRef as any}
+        value={draft}
+        onChange={(e) => { setDraft(e.target.value); }}
+        onBlur={commit}
+        onKeyDown={handleKeyDown}
+        className="w-full px-1 py-0.5 text-xs border border-blue-300 rounded bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400"
+      >
+        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+      </select>
+    );
+  }
+
+  if (type === 'textarea') {
+    return (
+      <div className="flex flex-col gap-1">
+        <textarea
+          ref={inputRef as any}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Escape') cancel(); }}
+          className="w-full px-1 py-0.5 text-xs border border-blue-300 rounded bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 min-h-[60px]"
+        />
+        <div className="flex gap-1">
+          <button onClick={commit} className="px-1.5 py-0.5 bg-blue-500 text-white rounded text-[10px] hover:bg-blue-600"><Save size={10} /></button>
+          <button onClick={cancel} className="px-1.5 py-0.5 bg-slate-200 rounded text-[10px] hover:bg-slate-300"><X size={10} /></button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <input
+      ref={inputRef as any}
+      type={type}
+      value={draft}
+      onChange={(e) => setDraft(type === 'number' ? e.target.value : e.target.value)}
+      onBlur={commit}
+      onKeyDown={handleKeyDown}
+      className={`w-full px-1 py-0.5 text-xs border border-blue-300 rounded bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 ${type === 'number' ? 'w-16 text-center' : ''}`}
+      min={type === 'number' ? 0 : undefined}
+    />
+  );
+}
+
+
 export default function IndiaStaffingPage() {
-  const { accounts, requisitions, statuses, addRequisition, addStatus, addAccount, removeRequisition, removeStatus, importRows } = useStaffingStore();
+  const { accounts, requisitions, statuses, addRequisition, addStatus, addAccount, updateRequisition, removeRequisition, removeStatus, importRows } = useStaffingStore();
 
   const [monthFilter, setMonthFilter] = useState('all');
   const [accountFilter, setAccountFilter] = useState('all');
   const [riskFilter, setRiskFilter] = useState<string>('all');
   const [activeTab, setActiveTab] = useState<'overview' | 'accounts' | 'forecast' | 'timeline' | 'entry'>('overview');
-  const [showAddReq, setShowAddReq] = useState(false);
-  const [showAddStatus, setShowAddStatus] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
 
-  /* ââ Build enriched rows ââ */
+  /* ââ Build enriched rows ââ */
   const rows: StaffingRow[] = useMemo(() => {
     return requisitions.map((req) => {
       const acct = accounts.find((a) => a.id === req.account_id);
@@ -58,19 +153,44 @@ export default function IndiaStaffingPage() {
     });
   }, [rows, monthFilter, accountFilter, riskFilter]);
 
-  /* ââ KPI aggregates ââ */
+  /* ââ KPI aggregates ââ */
   const totalPos = filtered.reduce((s, r) => s + r.totalPositions, 0);
   const closedRows = filtered.filter((r) => r.stage === 'Closed/Selected' || r.stage === 'Onboarding');
   const closedCount = closedRows.reduce((s, r) => s + r.totalPositions, 0);
   const highRiskCount = filtered.filter((r) => r.risk === 'high').length;
   const avgProb = filtered.length ? Math.round(filtered.reduce((s, r) => s + r.closureProb, 0) / filtered.length) : 0;
 
-  /* ââ Forecast aggregates ââ */
+  /* ââ Forecast aggregates ââ */
   const optimistic = filtered.filter((r) => r.closureProb >= 40).reduce((s, r) => s + r.totalPositions, 0);
   const realistic = filtered.filter((r) => r.closureProb >= 60).reduce((s, r) => s + r.totalPositions, 0);
   const conservative = filtered.filter((r) => r.closureProb >= 75).reduce((s, r) => s + r.totalPositions, 0);
 
-  /* ââ CSV import handler ââ */
+  /* ââ Inline update handler ââ */
+  const handleCellSave = useCallback((reqId: string, field: string, value: string | number) => {
+    const patch: Record<string, any> = {};
+    switch (field) {
+      case 'title': patch.title = value; break;
+      case 'month': patch.month = value; break;
+      case 'new_positions': patch.new_positions = Number(value); break;
+      case 'backfills': patch.backfills = Number(value); break;
+      case 'expected_closure': patch.expected_closure = value; break;
+      case 'anticipation': patch.anticipation = value; break;
+      case 'account_id': patch.account_id = value; break;
+      default: return;
+    }
+    updateRequisition(reqId, patch);
+  }, [updateRequisition]);
+
+  /* ââ Toggle expanded row ââ */
+  const toggleRow = (id: string) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  /* ââ CSV import handler ââ */
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -98,7 +218,7 @@ export default function IndiaStaffingPage() {
     if (fileRef.current) fileRef.current.value = '';
   };
 
-  /* ââ CSV export ââ */
+  /* ââ CSV export ââ */
   const handleExport = () => {
     let csv = 'Month,Account,Requisition,New Positions,Backfills,Expected Closure,Stage,Risk,Probability,Status,Anticipation\n';
     filtered.forEach((r) => {
@@ -111,7 +231,7 @@ export default function IndiaStaffingPage() {
     a.click();
   };
 
-  /* ââ Tabs ââ */
+  /* ââ Tabs ââ */
   const tabs = [
     { key: 'overview' as const, label: 'Executive Overview', icon: BarChart3 },
     { key: 'accounts' as const, label: 'Account Deep Dive', icon: Building2 },
@@ -120,7 +240,7 @@ export default function IndiaStaffingPage() {
     { key: 'entry' as const, label: 'Data Entry', icon: Plus },
   ];
 
-  /* ââ Account grouped data ââ */
+  /* ââ Account grouped data ââ */
   const accountGroups = useMemo(() => {
     const map = new Map<string, StaffingRow[]>();
     filtered.forEach((r) => {
@@ -131,22 +251,21 @@ export default function IndiaStaffingPage() {
     return map;
   }, [filtered]);
 
-  /* ââ Timeline entries ââ */
+  /* ââ Timeline entries ââ */
   const timelineEntries = useMemo(() => {
-    const entries: Array<{ date: string; account: string; requisition: string; detail: string; risk: RiskLevel }> = [];
+    const entries: Array<{ id: string; date: string; account: string; requisition: string; reqId: string; detail: string; risk: RiskLevel; anticipation: string; statusId: string }> = [];
     filtered.forEach((r) => {
-      r.status.split('\n').forEach((line) => {
-        const m = line.match(/(\d{2}\/\d{2})\s*:\s*(.*)/);
-        if (m) entries.push({ date: m[1], account: r.account, requisition: r.requisition, detail: m[2].trim(), risk: r.risk });
+      const reqStatuses = statuses.filter(s => s.requisition_id === r.id).sort((a, b) => b.status_date.localeCompare(a.status_date));
+      reqStatuses.forEach(s => {
+        entries.push({
+          id: s.id, statusId: s.id, date: s.status_date, account: r.account, requisition: r.requisition,
+          reqId: r.id, detail: s.status_text, risk: r.risk, anticipation: s.anticipation,
+        });
       });
     });
-    entries.sort((a, b) => {
-      const [am, ad] = a.date.split('/').map(Number);
-      const [bm, bd] = b.date.split('/').map(Number);
-      return am !== bm ? bm - am : bd - ad;
-    });
+    entries.sort((a, b) => b.date.localeCompare(a.date));
     return entries;
-  }, [filtered]);
+  }, [filtered, statuses]);
 
   const dateGroups = useMemo(() => {
     const map = new Map<string, typeof timelineEntries>();
@@ -157,6 +276,18 @@ export default function IndiaStaffingPage() {
     });
     return map;
   }, [timelineEntries]);
+
+  /* ââ Add inline status state ââ */
+  const [inlineStatusReqId, setInlineStatusReqId] = useState('');
+  const [inlineStatusText, setInlineStatusText] = useState('');
+  const [inlineStatusAntic, setInlineStatusAntic] = useState('');
+  const [inlineStatusDate, setInlineStatusDate] = useState(new Date().toISOString().slice(0, 10));
+  const [showInlineStatusForm, setShowInlineStatusForm] = useState(false);
+
+  /* ââ Editing timeline entry ââ */
+  const [editingTimelineId, setEditingTimelineId] = useState<string | null>(null);
+  const [editTimelineText, setEditTimelineText] = useState('');
+  const [editTimelineAntic, setEditTimelineAntic] = useState('');
 
   return (
     <>
@@ -208,38 +339,163 @@ export default function IndiaStaffingPage() {
             <StatCard label="Avg Closure Prob" value={`${avgProb}%`} icon={<TrendingUp size={20} />} subtitle="AI-scored" />
           </div>
 
-          {/* Table */}
+          {/* Editable Table */}
           <Card>
-            <h3 className="font-bold text-sm mb-3">All Requisitions</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold text-sm">All Requisitions</h3>
+              <span className="text-[10px] text-blue-500 font-medium bg-blue-50 px-2 py-1 rounded-full">Click any cell to edit</span>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b-2 border-slate-100">
+                    <th className="w-6 p-2"></th>
                     <th className="text-left p-2.5 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Account</th>
                     <th className="text-left p-2.5 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Requisition</th>
                     <th className="text-left p-2.5 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Month</th>
-                    <th className="text-center p-2.5 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Positions</th>
+                    <th className="text-center p-2.5 text-slate-400 font-bold uppercase tracking-wide text-[10px]">New</th>
+                    <th className="text-center p-2.5 text-slate-400 font-bold uppercase tracking-wide text-[10px]">BF</th>
+                    <th className="text-center p-2.5 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Total</th>
                     <th className="text-left p-2.5 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Stage</th>
                     <th className="text-left p-2.5 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Risk</th>
                     <th className="text-left p-2.5 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Prob</th>
-                    <th className="text-left p-2.5 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Close</th>
+                    <th className="text-left p-2.5 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Close By</th>
                     <th className="text-left p-2.5 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Latest Status</th>
+                    <th className="w-8 p-2"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((r) => (
-                    <tr key={r.id} className="border-b border-slate-50 hover:bg-slate-25">
-                      <td className="p-2.5 font-bold">{r.account}</td>
-                      <td className="p-2.5">{r.requisition}</td>
-                      <td className="p-2.5">{r.month}</td>
-                      <td className="p-2.5 text-center font-bold">{r.totalPositions}</td>
-                      <td className="p-2.5"><span className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white" style={{ background: STAGE_COLORS[r.stage] }}>{r.stage}</span></td>
-                      <td className="p-2.5"><StatusBadge status={r.risk === 'high' ? 'at-risk' : r.risk === 'medium' ? 'caution' : 'on-track'} label={r.risk} /></td>
-                      <td className="p-2.5"><div className="flex items-center gap-1.5"><div className="w-12 h-1.5 rounded bg-slate-100 overflow-hidden"><div className="h-full rounded" style={{ width: `${r.closureProb}%`, background: probColor(r.closureProb) }} /></div><span className="font-bold">{r.closureProb}%</span></div></td>
-                      <td className="p-2.5 text-slate-500 text-[11px]">{r.expectedClosure}</td>
-                      <td className="p-2.5 text-slate-500 text-[11px] max-w-xs truncate">{r.status.split('\n')[0]}</td>
-                    </tr>
-                  ))}
+                  {filtered.map((r) => {
+                    const isExpanded = expandedRows.has(r.id);
+                    const reqStatuses = statuses.filter(s => s.requisition_id === r.id).sort((a, b) => b.status_date.localeCompare(a.status_date));
+                    return (
+                      <>
+                        <tr key={r.id} className="border-b border-slate-50 hover:bg-slate-50/50">
+                          {/* Expand toggle */}
+                          <td className="p-1 text-center">
+                            <button onClick={() => toggleRow(r.id)} className="p-0.5 rounded hover:bg-slate-100" title="Show status history">
+                              {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                            </button>
+                          </td>
+                          {/* Account */}
+                          <td className="p-2.5">
+                            <EditableCell
+                              value={r.account_id}
+                              type="select"
+                              options={accounts.map(a => a.id)}
+                              onSave={(val) => handleCellSave(r.id, 'account_id', val)}
+                              displayContent={<span className="font-bold">{r.account}</span>}
+                            />
+                          </td>
+                          {/* Requisition */}
+                          <td className="p-2.5">
+                            <EditableCell value={r.requisition} onSave={(val) => handleCellSave(r.id, 'title', val)} />
+                          </td>
+                          {/* Month */}
+                          <td className="p-2.5">
+                            <EditableCell value={r.month} type="select" options={ALL_MONTHS} onSave={(val) => handleCellSave(r.id, 'month', val)} />
+                          </td>
+                          {/* New Positions */}
+                          <td className="p-2.5 text-center">
+                            <EditableCell value={r.newPositions} type="number" onSave={(val) => handleCellSave(r.id, 'new_positions', val)} className="justify-center" />
+                          </td>
+                          {/* Backfills */}
+                          <td className="p-2.5 text-center">
+                            <EditableCell value={r.backfills} type="number" onSave={(val) => handleCellSave(r.id, 'backfills', val)} className="justify-center" />
+                          </td>
+                          {/* Total (computed, not editable) */}
+                          <td className="p-2.5 text-center font-bold text-slate-700">{r.totalPositions}</td>
+                          {/* Stage (AI-computed) */}
+                          <td className="p-2.5">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white" style={{ background: STAGE_COLORS[r.stage] }}>{r.stage}</span>
+                          </td>
+                          {/* Risk (AI-computed) */}
+                          <td className="p-2.5">
+                            <StatusBadge status={r.risk === 'high' ? 'at-risk' : r.risk === 'medium' ? 'caution' : 'on-track'} label={r.risk} />
+                          </td>
+                          {/* Prob */}
+                          <td className="p-2.5">
+                            <div className="flex items-center gap-1.5">
+                              <div className="w-10 h-1.5 rounded bg-slate-100 overflow-hidden">
+                                <div className="h-full rounded" style={{ width: `${r.closureProb}%`, background: probColor(r.closureProb) }} />
+                              </div>
+                              <span className="font-bold">{r.closureProb}%</span>
+                            </div>
+                          </td>
+                          {/* Close By */}
+                          <td className="p-2.5">
+                            <EditableCell value={r.expectedClosure} onSave={(val) => handleCellSave(r.id, 'expected_closure', val)} className="text-slate-500 text-[11px]" />
+                          </td>
+                          {/* Latest Status */}
+                          <td className="p-2.5 max-w-[200px]">
+                            <EditableCell
+                              value={r.anticipation || r.status.split('\n')[0]}
+                              type="textarea"
+                              onSave={(val) => handleCellSave(r.id, 'anticipation', val)}
+                              displayContent={<span className="text-slate-500 text-[11px] truncate block max-w-[180px]">{r.status.split('\n')[0]}</span>}
+                            />
+                          </td>
+                          {/* Delete */}
+                          <td className="p-1">
+                            <button
+                              onClick={() => { if (confirm(`Delete "${r.requisition}"?`)) removeRequisition(r.id); }}
+                              className="p-1 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors"
+                              title="Delete requisition"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </td>
+                        </tr>
+                        {/* Expanded status history */}
+                        {isExpanded && (
+                          <tr key={`${r.id}-expanded`}>
+                            <td colSpan={13} className="bg-slate-50/80 p-0">
+                              <div className="px-8 py-3">
+                                <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Status History</div>
+                                {reqStatuses.length === 0 && <p className="text-xs text-slate-400 italic">No status updates yet</p>}
+                                <div className="space-y-1.5">
+                                  {reqStatuses.map(s => (
+                                    <div key={s.id} className="flex items-start gap-3 text-xs group">
+                                      <span className="text-slate-400 font-mono text-[10px] w-20 flex-shrink-0 pt-0.5">{s.status_date}</span>
+                                      <span className="flex-1 text-slate-600">{s.status_text}</span>
+                                      {s.anticipation && <span className="text-blue-500 text-[10px] italic flex-shrink-0">â {s.anticipation}</span>}
+                                      <button
+                                        onClick={() => { if (confirm('Delete this status?')) removeStatus(s.id); }}
+                                        className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 transition-all flex-shrink-0"
+                                        title="Delete status"
+                                      >
+                                        <Trash2 size={10} />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                                {/* Quick add status */}
+                                <div className="mt-3 flex gap-2 items-end">
+                                  <input type="date" className="px-2 py-1 text-[11px] border border-slate-200 rounded bg-white" defaultValue={new Date().toISOString().slice(0,10)} id={`date-${r.id}`} />
+                                  <input placeholder="Status update..." className="flex-1 px-2 py-1 text-[11px] border border-slate-200 rounded bg-white" id={`text-${r.id}`} />
+                                  <input placeholder="Anticipation..." className="w-40 px-2 py-1 text-[11px] border border-slate-200 rounded bg-white" id={`antic-${r.id}`} />
+                                  <button
+                                    onClick={() => {
+                                      const dateEl = document.getElementById(`date-${r.id}`) as HTMLInputElement;
+                                      const textEl = document.getElementById(`text-${r.id}`) as HTMLInputElement;
+                                      const anticEl = document.getElementById(`antic-${r.id}`) as HTMLInputElement;
+                                      if (textEl.value) {
+                                        addStatus({ requisition_id: r.id, status_date: dateEl.value, status_text: textEl.value, anticipation: anticEl.value });
+                                        textEl.value = ''; anticEl.value = '';
+                                      }
+                                    }}
+                                    className="px-3 py-1 bg-primary text-white rounded text-[11px] font-semibold hover:bg-primary/90 flex-shrink-0"
+                                  >
+                                    + Add
+                                  </button>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -353,28 +609,149 @@ export default function IndiaStaffingPage() {
 
       {/* ââââââ TIMELINE TAB ââââââ */}
       {activeTab === 'timeline' && (
-        <Card>
-          <h3 className="font-bold text-sm mb-4">Daily Status Timeline</h3>
-          <div className="max-h-[600px] overflow-y-auto space-y-5">
-            {[...dateGroups.entries()].map(([date, items]) => {
-              const mn = parseInt(date.split('/')[0]) >= 4 ? 'April' : 'March';
-              return (
-                <div key={date}>
-                  <div className="text-sm font-extrabold text-primary mb-2 sticky top-0 bg-white z-10 py-1">{mn} {date.split('/')[1]}</div>
-                  <div className="space-y-1.5">
-                    {items.map((item, i) => (
-                      <div key={i} className="border-l-2 pl-3 py-1 text-xs" style={{ borderColor: item.risk === 'high' ? '#ef4444' : item.risk === 'medium' ? '#f59e0b' : '#10b981' }}>
-                        <span className="font-bold">{item.account}</span>{' '}
-                        <span className="text-slate-400 text-[10px]">/ {item.requisition}</span>
-                        <br /><span className="text-slate-500">{item.detail}</span>
-                      </div>
-                    ))}
-                  </div>
+        <div className="space-y-4">
+          {/* Quick add status */}
+          <Card>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold text-sm">Add Status Update</h3>
+              <button
+                onClick={() => setShowInlineStatusForm(!showInlineStatusForm)}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${showInlineStatusForm ? 'bg-slate-200 text-slate-700' : 'bg-primary text-white hover:bg-primary/90'}`}
+              >
+                {showInlineStatusForm ? <><X size={12} /> Close</> : <><Plus size={12} /> New Update</>}
+              </button>
+            </div>
+            {showInlineStatusForm && (
+              <div className="flex flex-wrap gap-3 items-end border-t border-slate-100 pt-3">
+                <div className="flex-1 min-w-[200px]">
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Requisition</label>
+                  <select className="w-full px-2 py-1.5 rounded-lg border border-slate-200 text-xs" value={inlineStatusReqId} onChange={e => setInlineStatusReqId(e.target.value)}>
+                    <option value="">Selectâ¦</option>
+                    {requisitions.map(r => {
+                      const acct = accounts.find(a => a.id === r.account_id);
+                      return <option key={r.id} value={r.id}>{acct?.name} â {r.title} ({r.month})</option>;
+                    })}
+                  </select>
                 </div>
-              );
-            })}
-          </div>
-        </Card>
+                <div className="w-36">
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Date</label>
+                  <input type="date" className="w-full px-2 py-1.5 rounded-lg border border-slate-200 text-xs" value={inlineStatusDate} onChange={e => setInlineStatusDate(e.target.value)} />
+                </div>
+                <div className="flex-1 min-w-[200px]">
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Status</label>
+                  <input className="w-full px-2 py-1.5 rounded-lg border border-slate-200 text-xs" value={inlineStatusText} onChange={e => setInlineStatusText(e.target.value)} placeholder="What happened today?" />
+                </div>
+                <div className="w-48">
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Anticipation</label>
+                  <input className="w-full px-2 py-1.5 rounded-lg border border-slate-200 text-xs" value={inlineStatusAntic} onChange={e => setInlineStatusAntic(e.target.value)} placeholder="Outlookâ¦" />
+                </div>
+                <button
+                  onClick={() => {
+                    if (inlineStatusReqId && inlineStatusText) {
+                      addStatus({ requisition_id: inlineStatusReqId, status_date: inlineStatusDate, status_text: inlineStatusText, anticipation: inlineStatusAntic });
+                      setInlineStatusText(''); setInlineStatusAntic('');
+                    }
+                  }}
+                  className="px-4 py-1.5 bg-primary text-white rounded-lg text-xs font-semibold hover:bg-primary/90"
+                >
+                  Save
+                </button>
+              </div>
+            )}
+          </Card>
+
+          {/* Timeline */}
+          <Card>
+            <h3 className="font-bold text-sm mb-4">Daily Status Timeline</h3>
+            <div className="max-h-[600px] overflow-y-auto space-y-6">
+              {dateGroups.size === 0 && <p className="text-sm text-slate-400 text-center py-8">No status updates match the current filters</p>}
+              {[...dateGroups.entries()].map(([date, items]) => {
+                const d = new Date(date + 'T00:00:00');
+                const label = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+                return (
+                  <div key={date}>
+                    <div className="flex items-center gap-2 mb-3 sticky top-0 bg-white z-10 py-1">
+                      <div className="h-px flex-1 bg-slate-100" />
+                      <span className="text-xs font-extrabold text-primary px-3 py-1 bg-primary/5 rounded-full">{label}</span>
+                      <div className="h-px flex-1 bg-slate-100" />
+                    </div>
+                    <div className="space-y-2">
+                      {items.map((item) => (
+                        <div key={item.statusId} className="flex gap-3 group" >
+                          <div className="w-1 rounded-full flex-shrink-0" style={{ background: item.risk === 'high' ? '#ef4444' : item.risk === 'medium' ? '#f59e0b' : '#10b981' }} />
+                          <div className="flex-1 bg-white border border-slate-100 rounded-lg p-3 hover:shadow-sm transition-shadow">
+                            {editingTimelineId === item.statusId ? (
+                              <div className="space-y-2">
+                                <input
+                                  className="w-full px-2 py-1 text-xs border border-blue-300 rounded bg-blue-50"
+                                  value={editTimelineText}
+                                  onChange={e => setEditTimelineText(e.target.value)}
+                                  placeholder="Status..."
+                                />
+                                <input
+                                  className="w-full px-2 py-1 text-xs border border-blue-300 rounded bg-blue-50"
+                                  value={editTimelineAntic}
+                                  onChange={e => setEditTimelineAntic(e.target.value)}
+                                  placeholder="Anticipation..."
+                                />
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => {
+                                      // Update status via removeStatus + addStatus (no updateStatus method)
+                                      const orig = statuses.find(s => s.id === item.statusId);
+                                      if (orig) {
+                                        removeStatus(item.statusId);
+                                        addStatus({ requisition_id: orig.requisition_id, status_date: orig.status_date, status_text: editTimelineText, anticipation: editTimelineAntic });
+                                      }
+                                      setEditingTimelineId(null);
+                                    }}
+                                    className="px-3 py-1 bg-blue-500 text-white rounded text-[11px] font-semibold hover:bg-blue-600 flex items-center gap-1"
+                                  >
+                                    <Save size={10} /> Save
+                                  </button>
+                                  <button onClick={() => setEditingTimelineId(null)} className="px-3 py-1 bg-slate-100 rounded text-[11px] hover:bg-slate-200 flex items-center gap-1">
+                                    <X size={10} /> Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="flex items-center justify-between mb-1">
+                                  <div>
+                                    <span className="font-bold text-xs">{item.account}</span>
+                                    <span className="text-slate-400 text-[10px] ml-1.5">/ {item.requisition}</span>
+                                  </div>
+                                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button
+                                      onClick={() => { setEditingTimelineId(item.statusId); setEditTimelineText(item.detail); setEditTimelineAntic(item.anticipation); }}
+                                      className="p-1 rounded hover:bg-blue-50 text-slate-300 hover:text-blue-500"
+                                      title="Edit"
+                                    >
+                                      <Pencil size={11} />
+                                    </button>
+                                    <button
+                                      onClick={() => { if (confirm('Delete this status update?')) removeStatus(item.statusId); }}
+                                      className="p-1 rounded hover:bg-red-50 text-slate-300 hover:text-red-500"
+                                      title="Delete"
+                                    >
+                                      <Trash2 size={11} />
+                                    </button>
+                                  </div>
+                                </div>
+                                <p className="text-xs text-slate-600">{item.detail}</p>
+                                {item.anticipation && <p className="text-[11px] text-blue-500 mt-1 italic">â {item.anticipation}</p>}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        </div>
       )}
 
       {/* ââââââ DATA ENTRY TAB ââââââ */}
@@ -394,7 +771,7 @@ export default function IndiaStaffingPage() {
   );
 }
 
-/* ââ Sub-components for data entry ââ */
+/* ââ Sub-components for data entry ââ */
 
 function AddStatusForm({ accounts, requisitions, onSubmit }: {
   accounts: { id: string; name: string }[];
