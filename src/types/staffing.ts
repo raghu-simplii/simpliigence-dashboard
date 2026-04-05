@@ -6,6 +6,13 @@ export interface StaffingAccount {
   created_at: string;
 }
 
+export type StaffingStatus =
+  | 'Open'
+  | 'In Progress'
+  | 'On Hold'
+  | 'Closed'
+  | 'Cancelled';
+
 export interface StaffingRequisition {
   id: string;
   account_id: string;
@@ -15,6 +22,8 @@ export interface StaffingRequisition {
   new_positions: number;
   backfills: number;
   expected_closure: string;
+  close_by_date: string;
+  status_field: StaffingStatus;
   anticipation: string;
   created_at: string;
   updated_at: string;
@@ -50,6 +59,8 @@ export interface StaffingRow {
   backfills: number;
   totalPositions: number;
   expectedClosure: string;
+  closeByDate: string;
+  statusField: StaffingStatus;
   status: string;
   anticipation: string;
   closureProb: number;
