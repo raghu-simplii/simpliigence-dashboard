@@ -24,11 +24,11 @@ export interface StaffingRequisition {
   expected_closure: string;
   close_by_date: string;
   status_field: StaffingStatus;
+  stage: PipelineStage;
   anticipation: string;
   created_at: string;
   updated_at: string;
 }
-
 export interface DailyStatus {
   id: string;
   requisition_id: string;
@@ -68,7 +68,6 @@ export interface StaffingRow {
   stage: PipelineStage;
   velocity: number;
 }
-
 export const MONTHS = [
   'January','February','March','April','May','June',
   'July','August','September','October','November','December',
