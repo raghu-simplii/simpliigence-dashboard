@@ -5,9 +5,10 @@ import type {
   StaffingAccount,
   StaffingRequisition,
   DailyStatus,
+  StaffingStatus,
 } from '../types/staffing';
 
-/* ââ Seed data from original Staffing.xlsx ââ */
+/* ── Seed data from original Staffing.xlsx ── */
 const SEED_ACCOUNTS: StaffingAccount[] = [
   { id: 'acct-1', name: 'Acuity', created_at: '2025-03-01' },
   { id: 'acct-2', name: 'Amex', created_at: '2025-03-01' },
@@ -18,43 +19,43 @@ const SEED_ACCOUNTS: StaffingAccount[] = [
 ];
 
 const SEED_REQS: StaffingRequisition[] = [
-  {id:'r1',account_id:'acct-1',title:'Mixed (FSL Architect, Python+AI, .Net FullStack)',month:'March',new_positions:1,backfills:5,expected_closure:'March End',anticipation:'Expecting closures in early next week',created_at:'2025-03-01',updated_at:'2025-03-27'},
-  {id:'r2',account_id:'acct-2',title:'Product Owner',month:'March',new_positions:2,backfills:0,expected_closure:'March End',anticipation:'Expecting onboarding Mon/Early next week',created_at:'2025-03-01',updated_at:'2025-03-27'},
-  {id:'r3',account_id:'acct-3',title:'AI Architect - Healthcare',month:'March',new_positions:1,backfills:1,expected_closure:'March End',anticipation:'No hopes. Expecting the L1 Selection',created_at:'2025-03-01',updated_at:'2025-03-26'},
-  {id:'r4',account_id:'acct-3',title:'AI',month:'March',new_positions:1,backfills:0,expected_closure:'March End',anticipation:'Expecting client call - no hopes',created_at:'2025-03-01',updated_at:'2025-03-26'},
-  {id:'r5',account_id:'acct-3',title:'DevOps',month:'March',new_positions:2,backfills:0,expected_closure:'March End',anticipation:'No hopes. Expecting at least one selection',created_at:'2025-03-01',updated_at:'2025-03-25'},
-  {id:'r6',account_id:'acct-3',title:'Java',month:'March',new_positions:10,backfills:0,expected_closure:'March End',anticipation:'No hopes. Screening but no hopes on closures',created_at:'2025-03-01',updated_at:'2025-03-27'},
-  {id:'r7',account_id:'acct-4',title:'Support',month:'March',new_positions:4,backfills:0,expected_closure:'March End',anticipation:'Expecting the slots',created_at:'2025-03-01',updated_at:'2025-03-27'},
-  {id:'r8',account_id:'acct-4',title:'Developer',month:'March',new_positions:3,backfills:0,expected_closure:'March End',anticipation:'Expecting one more slot',created_at:'2025-03-01',updated_at:'2025-03-18'},
-  {id:'r9',account_id:'acct-4',title:'Lead',month:'March',new_positions:1,backfills:0,expected_closure:'March End',anticipation:'Expecting slots 03/23 or 03/24',created_at:'2025-03-01',updated_at:'2025-03-26'},
-  {id:'r10',account_id:'acct-5',title:'CPQ/Conga Architect',month:'March',new_positions:1,backfills:0,expected_closure:'Overdue',anticipation:'Expecting the onboarding date',created_at:'2025-03-01',updated_at:'2025-03-24'},
-  {id:'r11',account_id:'acct-5',title:'CPQ/Conga Developer',month:'March',new_positions:1,backfills:0,expected_closure:'Overdue',anticipation:'Expecting the onboarding date',created_at:'2025-03-01',updated_at:'2025-03-24'},
-  {id:'r12',account_id:'acct-5',title:'CPQ Architect + AI',month:'March',new_positions:1,backfills:0,expected_closure:'March End',anticipation:'No hopes. Expecting more slots',created_at:'2025-03-01',updated_at:'2025-03-26'},
-  {id:'r13',account_id:'acct-5',title:'CPQ Developer + AI',month:'March',new_positions:2,backfills:0,expected_closure:'March End',anticipation:'Expecting select or more client discussion',created_at:'2025-03-01',updated_at:'2025-03-25'},
-  {id:'r14',account_id:'acct-5',title:'LWC/Integration',month:'March',new_positions:1,backfills:0,expected_closure:'March End',anticipation:'Expecting the L1 slot',created_at:'2025-03-01',updated_at:'2025-03-26'},
-  {id:'r15',account_id:'acct-5',title:'Dev Lead - Salescloud, CPQ',month:'March',new_positions:1,backfills:0,expected_closure:'March End',anticipation:'Expecting at least 1 to hit',created_at:'2025-03-01',updated_at:'2025-03-26'},
-  {id:'r16',account_id:'acct-5',title:'Service Cloud Voice Tech Lead + Architect',month:'March',new_positions:2,backfills:0,expected_closure:'March End',anticipation:'R1 should clear',created_at:'2025-03-01',updated_at:'2025-03-27'},
-  {id:'r17',account_id:'acct-5',title:'SF Architect (Sales, Conga CPQ, CLM)',month:'March',new_positions:1,backfills:0,expected_closure:'March End',anticipation:'No hopes. Expecting clarity on role',created_at:'2025-03-01',updated_at:'2025-03-27'},
-  {id:'r18',account_id:'acct-5',title:'SF Automation QA (ACCELQ)',month:'March',new_positions:1,backfills:0,expected_closure:'March End',anticipation:'Expecting the slots',created_at:'2025-03-01',updated_at:'2025-03-24'},
-  {id:'r19',account_id:'acct-5',title:'Salesforce Agentforce (7+ Yrs)',month:'March',new_positions:1,backfills:0,expected_closure:'March End',anticipation:'No hopes. Expecting L1 Selection',created_at:'2025-03-01',updated_at:'2025-03-25'},
-  {id:'r20',account_id:'acct-5',title:'SF Vlocity',month:'March',new_positions:1,backfills:0,expected_closure:'March End',anticipation:'No hopes. Expecting L1 Selection',created_at:'2025-03-01',updated_at:'2025-03-18'},
-  {id:'r21',account_id:'acct-6',title:'SF Developer',month:'March',new_positions:1,backfills:0,expected_closure:'March End',anticipation:'Expecting client discussion',created_at:'2025-03-01',updated_at:'2025-03-27'},
-  {id:'r22',account_id:'acct-6',title:'SF Service Cloud CTI',month:'March',new_positions:1,backfills:0,expected_closure:'March End',anticipation:'Expecting client discussion',created_at:'2025-03-01',updated_at:'2025-03-23'},
+  {id:'r1',account_id:'acct-1',title:'Mixed (FSL Architect, Python+AI, .Net FullStack)',month:'March',new_positions:1,backfills:5,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'Expecting closures in early next week',created_at:'2025-03-01',updated_at:'2025-03-27'},
+  {id:'r2',account_id:'acct-2',title:'Product Owner',month:'March',new_positions:2,backfills:0,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'Expecting onboarding Mon/Early next week',created_at:'2025-03-01',updated_at:'2025-03-27'},
+  {id:'r3',account_id:'acct-3',title:'AI Architect - Healthcare',month:'March',new_positions:1,backfills:1,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'No hopes. Expecting the L1 Selection',created_at:'2025-03-01',updated_at:'2025-03-26'},
+  {id:'r4',account_id:'acct-3',title:'AI',month:'March',new_positions:1,backfills:0,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'Expecting client call - no hopes',created_at:'2025-03-01',updated_at:'2025-03-26'},
+  {id:'r5',account_id:'acct-3',title:'DevOps',month:'March',new_positions:2,backfills:0,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'No hopes. Expecting at least one selection',created_at:'2025-03-01',updated_at:'2025-03-25'},
+  {id:'r6',account_id:'acct-3',title:'Java',month:'March',new_positions:10,backfills:0,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'No hopes. Screening but no hopes on closures',created_at:'2025-03-01',updated_at:'2025-03-27'},
+  {id:'r7',account_id:'acct-4',title:'Support',month:'March',new_positions:4,backfills:0,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'Expecting the slots',created_at:'2025-03-01',updated_at:'2025-03-27'},
+  {id:'r8',account_id:'acct-4',title:'Developer',month:'March',new_positions:3,backfills:0,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'Expecting one more slot',created_at:'2025-03-01',updated_at:'2025-03-18'},
+  {id:'r9',account_id:'acct-4',title:'Lead',month:'March',new_positions:1,backfills:0,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'Expecting slots 03/23 or 03/24',created_at:'2025-03-01',updated_at:'2025-03-26'},
+  {id:'r10',account_id:'acct-5',title:'CPQ/Conga Architect',month:'March',new_positions:1,backfills:0,expected_closure:'Overdue',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'Expecting the onboarding date',created_at:'2025-03-01',updated_at:'2025-03-24'},
+  {id:'r11',account_id:'acct-5',title:'CPQ/Conga Developer',month:'March',new_positions:1,backfills:0,expected_closure:'Overdue',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'Expecting the onboarding date',created_at:'2025-03-01',updated_at:'2025-03-24'},
+  {id:'r12',account_id:'acct-5',title:'CPQ Architect + AI',month:'March',new_positions:1,backfills:0,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'No hopes. Expecting more slots',created_at:'2025-03-01',updated_at:'2025-03-26'},
+  {id:'r13',account_id:'acct-5',title:'CPQ Developer + AI',month:'March',new_positions:2,backfills:0,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'Expecting select or more client discussion',created_at:'2025-03-01',updated_at:'2025-03-25'},
+  {id:'r14',account_id:'acct-5',title:'LWC/Integration',month:'March',new_positions:1,backfills:0,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'Expecting the L1 slot',created_at:'2025-03-01',updated_at:'2025-03-26'},
+  {id:'r15',account_id:'acct-5',title:'Dev Lead - Salescloud, CPQ',month:'March',new_positions:1,backfills:0,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'Expecting at least 1 to hit',created_at:'2025-03-01',updated_at:'2025-03-26'},
+  {id:'r16',account_id:'acct-5',title:'Service Cloud Voice Tech Lead + Architect',month:'March',new_positions:2,backfills:0,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'R1 should clear',created_at:'2025-03-01',updated_at:'2025-03-27'},
+  {id:'r17',account_id:'acct-5',title:'SF Architect (Sales, Conga CPQ, CLM)',month:'March',new_positions:1,backfills:0,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'No hopes. Expecting clarity on role',created_at:'2025-03-01',updated_at:'2025-03-27'},
+  {id:'r18',account_id:'acct-5',title:'SF Automation QA (ACCELQ)',month:'March',new_positions:1,backfills:0,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'Expecting the slots',created_at:'2025-03-01',updated_at:'2025-03-24'},
+  {id:'r19',account_id:'acct-5',title:'Salesforce Agentforce (7+ Yrs)',month:'March',new_positions:1,backfills:0,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'No hopes. Expecting L1 Selection',created_at:'2025-03-01',updated_at:'2025-03-25'},
+  {id:'r20',account_id:'acct-5',title:'SF Vlocity',month:'March',new_positions:1,backfills:0,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'No hopes. Expecting L1 Selection',created_at:'2025-03-01',updated_at:'2025-03-18'},
+  {id:'r21',account_id:'acct-6',title:'SF Developer',month:'March',new_positions:1,backfills:0,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'Expecting client discussion',created_at:'2025-03-01',updated_at:'2025-03-27'},
+  {id:'r22',account_id:'acct-6',title:'SF Service Cloud CTI',month:'March',new_positions:1,backfills:0,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'Expecting client discussion',created_at:'2025-03-01',updated_at:'2025-03-23'},
   // April
-  {id:'r23',account_id:'acct-1',title:'SF Architect / Python+AI / Solution Architect',month:'April',new_positions:1,backfills:2,expected_closure:'7th April',anticipation:'Python+AI shall close one of 3 proposed',created_at:'2025-04-01',updated_at:'2025-04-02'},
-  {id:'r24',account_id:'acct-2',title:'Product Owner',month:'April',new_positions:2,backfills:0,expected_closure:'March 31st (Carried)',anticipation:'In Onboarding discussion',created_at:'2025-04-01',updated_at:'2025-04-02'},
-  {id:'r25',account_id:'acct-3',title:'Java',month:'April',new_positions:10,backfills:0,expected_closure:'TBD',anticipation:'No hopes. No hopes on closures',created_at:'2025-04-01',updated_at:'2025-04-02'},
-  {id:'r26',account_id:'acct-4',title:'Support',month:'April',new_positions:3,backfills:0,expected_closure:'10th April',anticipation:'Profiles shared, awaiting feedback',created_at:'2025-04-01',updated_at:'2025-04-02'},
-  {id:'r27',account_id:'acct-4',title:'Developer',month:'April',new_positions:6,backfills:0,expected_closure:'24th April',anticipation:'Targeting to close in April',created_at:'2025-04-01',updated_at:'2025-04-02'},
-  {id:'r28',account_id:'acct-4',title:'Lead',month:'April',new_positions:1,backfills:0,expected_closure:'10th April',anticipation:'Early stage',created_at:'2025-04-01',updated_at:'2025-04-02'},
-  {id:'r29',account_id:'acct-5',title:'CPQ Architect + AI',month:'April',new_positions:1,backfills:0,expected_closure:'TBD',anticipation:'No hopes. Expecting more slots',created_at:'2025-04-01',updated_at:'2025-03-26'},
-  {id:'r30',account_id:'acct-5',title:'Dev Lead - Salescloud, CPQ',month:'April',new_positions:1,backfills:0,expected_closure:'TBD',anticipation:'No hopes. Expecting at least 1 to hit',created_at:'2025-04-01',updated_at:'2025-03-26'},
-  {id:'r31',account_id:'acct-5',title:'Service Cloud Voice Tech Lead + Architect',month:'April',new_positions:2,backfills:0,expected_closure:'TBD',anticipation:'No Hopes. R1 should clear',created_at:'2025-04-01',updated_at:'2025-03-27'},
-  {id:'r32',account_id:'acct-5',title:'SF Architect (Sales, Conga CPQ, CLM)',month:'April',new_positions:1,backfills:0,expected_closure:'TBD',anticipation:'No hopes',created_at:'2025-04-01',updated_at:'2025-03-27'},
-  {id:'r33',account_id:'acct-5',title:'SF Automation QA (ACCELQ)',month:'April',new_positions:1,backfills:0,expected_closure:'TBD',anticipation:'Expecting the slots',created_at:'2025-04-01',updated_at:'2025-04-02'},
-  {id:'r34',account_id:'acct-5',title:'Salesforce Agentforce (7+ Yrs)',month:'April',new_positions:1,backfills:0,expected_closure:'TBD',anticipation:'No hopes to hopes. Expecting L1 Selection',created_at:'2025-04-01',updated_at:'2025-04-02'},
-  {id:'r35',account_id:'acct-6',title:'SF Developer',month:'April',new_positions:1,backfills:0,expected_closure:'April 10th',anticipation:'Reject',created_at:'2025-04-01',updated_at:'2025-04-01'},
-  {id:'r36',account_id:'acct-6',title:'SF Service Cloud CTI',month:'April',new_positions:1,backfills:0,expected_closure:'TBD',anticipation:'Onboarding - 3 to 4 weeks',created_at:'2025-04-01',updated_at:'2025-04-01'},
+  {id:'r23',account_id:'acct-1',title:'SF Architect / Python+AI / Solution Architect',month:'April',new_positions:1,backfills:2,expected_closure:'7th April',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'Python+AI shall close one of 3 proposed',created_at:'2025-04-01',updated_at:'2025-04-02'},
+  {id:'r24',account_id:'acct-2',title:'Product Owner',month:'April',new_positions:2,backfills:0,expected_closure:'March 31st (Carried)',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'In Onboarding discussion',created_at:'2025-04-01',updated_at:'2025-04-02'},
+  {id:'r25',account_id:'acct-3',title:'Java',month:'April',new_positions:10,backfills:0,expected_closure:'TBD',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'No hopes. No hopes on closures',created_at:'2025-04-01',updated_at:'2025-04-02'},
+  {id:'r26',account_id:'acct-4',title:'Support',month:'April',new_positions:3,backfills:0,expected_closure:'10th April',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'Profiles shared, awaiting feedback',created_at:'2025-04-01',updated_at:'2025-04-02'},
+  {id:'r27',account_id:'acct-4',title:'Developer',month:'April',new_positions:6,backfills:0,expected_closure:'24th April',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'Targeting to close in April',created_at:'2025-04-01',updated_at:'2025-04-02'},
+  {id:'r28',account_id:'acct-4',title:'Lead',month:'April',new_positions:1,backfills:0,expected_closure:'10th April',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'Early stage',created_at:'2025-04-01',updated_at:'2025-04-02'},
+  {id:'r29',account_id:'acct-5',title:'CPQ Architect + AI',month:'April',new_positions:1,backfills:0,expected_closure:'TBD',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'No hopes. Expecting more slots',created_at:'2025-04-01',updated_at:'2025-03-26'},
+  {id:'r30',account_id:'acct-5',title:'Dev Lead - Salescloud, CPQ',month:'April',new_positions:1,backfills:0,expected_closure:'TBD',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'No hopes. Expecting at least 1 to hit',created_at:'2025-04-01',updated_at:'2025-03-26'},
+  {id:'r31',account_id:'acct-5',title:'Service Cloud Voice Tech Lead + Architect',month:'April',new_positions:2,backfills:0,expected_closure:'TBD',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'No Hopes. R1 should clear',created_at:'2025-04-01',updated_at:'2025-03-27'},
+  {id:'r32',account_id:'acct-5',title:'SF Architect (Sales, Conga CPQ, CLM)',month:'April',new_positions:1,backfills:0,expected_closure:'TBD',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'No hopes',created_at:'2025-04-01',updated_at:'2025-03-27'},
+  {id:'r33',account_id:'acct-5',title:'SF Automation QA (ACCELQ)',month:'April',new_positions:1,backfills:0,expected_closure:'TBD',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'Expecting the slots',created_at:'2025-04-01',updated_at:'2025-04-02'},
+  {id:'r34',account_id:'acct-5',title:'Salesforce Agentforce (7+ Yrs)',month:'April',new_positions:1,backfills:0,expected_closure:'TBD',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'No hopes to hopes. Expecting L1 Selection',created_at:'2025-04-01',updated_at:'2025-04-02'},
+  {id:'r35',account_id:'acct-6',title:'SF Developer',month:'April',new_positions:1,backfills:0,expected_closure:'April 10th',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'Reject',created_at:'2025-04-01',updated_at:'2025-04-01'},
+  {id:'r36',account_id:'acct-6',title:'SF Service Cloud CTI',month:'April',new_positions:1,backfills:0,expected_closure:'TBD',close_by_date:'',status_field:'In Progress' as StaffingStatus,anticipation:'Onboarding - 3 to 4 weeks',created_at:'2025-04-01',updated_at:'2025-04-01'},
 ];
 
 const SEED_STATUSES: DailyStatus[] = [
@@ -84,7 +85,7 @@ const SEED_STATUSES: DailyStatus[] = [
   {id:'s24',requisition_id:'r36',status_date:'2025-04-01',status_text:'Select - got the confirmation',anticipation:'Onboarding 3-4 weeks',created_at:'2025-04-01'},
 ];
 
-/* ââ Store shape ââ */
+/* ── Store shape ── */
 interface StaffingState {
   accounts: StaffingAccount[];
   requisitions: StaffingRequisition[];
@@ -178,14 +179,15 @@ export const useStaffingStore = create<StaffingState>()(
               newAccounts.push(acct);
             }
             let req = newReqs.find(
-              (r) => r.account_id === acct!.id && r.title === row.requisition && r.month === row.month,
+              (r) => r.account_id === acct.id && r.title === row.requisition && r.month === row.month,
             );
             if (!req) {
               const now = new Date().toISOString();
               req = {
                 id: nanoid(), account_id: acct.id, title: row.requisition, month: row.month,
                 new_positions: row.new_positions || 0, backfills: row.backfills || 0,
-                expected_closure: row.expected_closure || '', anticipation: row.anticipation || '',
+                expected_closure: row.expected_closure || '', close_by_date: '', status_field: 'Open' as StaffingStatus,
+                anticipation: row.anticipation || '',
                 created_at: now, updated_at: now,
               };
               newReqs.push(req);
