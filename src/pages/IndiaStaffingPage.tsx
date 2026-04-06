@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useState, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useRef, useCallback } from 'react';
 import {
   Users, AlertTriangle, TrendingUp, CheckCircle, Upload,
   Download, Brain, BarChart3, Building2, Pencil, Trash2, Save, X, ChevronDown, ChevronRight,
