@@ -9,7 +9,7 @@ import type {
   PipelineStage,
 } from '../types/staffing';
 
-/* —— Seed data from original Staffing.xlsx —— */
+/* ââ Seed data from original Staffing.xlsx ââ */
 const SEED_ACCOUNTS: StaffingAccount[] = [
   { id: 'acct-1', name: 'Acuity', created_at: '2025-03-01' },
   { id: 'acct-2', name: 'Amex', created_at: '2025-03-01' },
@@ -60,33 +60,33 @@ const SEED_REQS: StaffingRequisition[] = [
 ];
 
 const SEED_STATUSES: DailyStatus[] = [
-  {id:'s1',requisition_id:'r1',status_date:'2025-03-27',status_text:'Got an FSL Architect position; Python+AI 2 interviews scheduled',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Expecting closures early next week',created_at:'2025-03-27'},
-  {id:'s2',requisition_id:'r1',status_date:'2025-03-26',status_text:'Closed 2 .Net Full Stack positions & working on Python+AI',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Targeting to close today/tomorrow',created_at:'2025-03-26'},
-  {id:'s3',requisition_id:'r1',status_date:'2025-03-25',status_text:'Full Stack interviews scheduled & working on Python+AI',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'',created_at:'2025-03-25'},
-  {id:'s4',requisition_id:'r1',status_date:'2025-03-18',status_text:'1 .Net FullStack Select',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'',created_at:'2025-03-18'},
-  {id:'s5',requisition_id:'r1',status_date:'2025-03-17',status_text:'1 .Net closed, 2 .Net FullStack in Client Evaluation, 1 Python in Screening',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'',created_at:'2025-03-17'},
-  {id:'s6',requisition_id:'r2',status_date:'2025-03-27',status_text:'Closed 2 positions & working on onboarding process',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Onboarding Mon/Early next week',created_at:'2025-03-27'},
-  {id:'s7',requisition_id:'r2',status_date:'2025-03-24',status_text:'1 Select (Rashmi for senior PO), other scheduled. Got verbal communication',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'',created_at:'2025-03-24'},
-  {id:'s8',requisition_id:'r2',status_date:'2025-03-23',status_text:'Got slots for 2 candidates - 03/24 & 03/26',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'',created_at:'2025-03-23'},
-  {id:'s9',requisition_id:'r2',status_date:'2025-03-17',status_text:'Shared profiles',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'',created_at:'2025-03-17'},
-  {id:'s10',requisition_id:'r6',status_date:'2025-03-27',status_text:'1 In Client round & 2 Need client slots',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'No hopes on closures',created_at:'2025-03-27'},
-  {id:'s11',requisition_id:'r6',status_date:'2025-03-26',status_text:'6 Evaluations done - 3 select for next round',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'',created_at:'2025-03-26'},
-  {id:'s12',requisition_id:'r6',status_date:'2025-03-24',status_text:'Got slots for 12 folks',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'',created_at:'2025-03-24'},
-  {id:'s13',requisition_id:'r6',status_date:'2025-03-17',status_text:'Planning to share 09 profiles',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'',created_at:'2025-03-17'},
-  {id:'s14',requisition_id:'r7',status_date:'2025-03-27',status_text:'1 Select out of 3 & Need more profiles',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'',created_at:'2025-03-27'},
-  {id:'s15',requisition_id:'r7',status_date:'2025-03-26',status_text:'2 Interviews done, 1 select for next round',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'',created_at:'2025-03-26'},
-  {id:'s16',requisition_id:'r23',status_date:'2025-04-02',status_text:'SF Architect: Shared 4 profiles. Python+AI: Awaiting feedback. 2 Backfill interviews in place',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Python+AI shall close one of 3',created_at:'2025-04-02'},
-  {id:'s17',requisition_id:'r24',status_date:'2025-04-02',status_text:'Identified Resources & Working on onboarding Process',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'In Onboarding discussion',created_at:'2025-04-02'},
-  {id:'s18',requisition_id:'r24',status_date:'2025-04-01',status_text:'In Onboarding discussion',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'',created_at:'2025-04-01'},
-  {id:'s19',requisition_id:'r25',status_date:'2025-04-02',status_text:'Ciklum TA working on high priority tasks. Need time to move forward',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'No hopes',created_at:'2025-04-02'},
-  {id:'s20',requisition_id:'r25',status_date:'2025-04-01',status_text:'No News from Client',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'',created_at:'2025-04-01'},
-  {id:'s21',requisition_id:'r26',status_date:'2025-04-02',status_text:'Shared 5 profiles on 04/01, 1 Candidate Reject',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'',created_at:'2025-04-02'},
-  {id:'s22',requisition_id:'r27',status_date:'2025-04-02',status_text:'1 R2 clear & put across client round',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Targeting to close in April',created_at:'2025-04-02'},
-  {id:'s23',requisition_id:'r34',status_date:'2025-04-02',status_text:'Client Select & Awaiting Final feedback',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Expecting L1 Selection',created_at:'2025-04-02'},
-  {id:'s24',requisition_id:'r36',status_date:'2025-04-01',status_text:'Select - got the confirmation',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Onboarding 3-4 weeks',created_at:'2025-04-01'},
+  {id:'s1',requisition_id:'r1',status_date:'2025-03-27',status_text:'Got an FSL Architect position; Python+AI 2 interviews scheduled',anticipation:'Expecting closures early next week',created_at:'2025-03-27'},
+  {id:'s2',requisition_id:'r1',status_date:'2025-03-26',status_text:'Closed 2 .Net Full Stack positions & working on Python+AI',anticipation:'Targeting to close today/tomorrow',created_at:'2025-03-26'},
+  {id:'s3',requisition_id:'r1',status_date:'2025-03-25',status_text:'Full Stack interviews scheduled & working on Python+AI',anticipation:'',created_at:'2025-03-25'},
+  {id:'s4',requisition_id:'r1',status_date:'2025-03-18',status_text:'1 .Net FullStack Select',anticipation:'',created_at:'2025-03-18'},
+  {id:'s5',requisition_id:'r1',status_date:'2025-03-17',status_text:'1 .Net closed, 2 .Net FullStack in Client Evaluation, 1 Python in Screening',anticipation:'',created_at:'2025-03-17'},
+  {id:'s6',requisition_id:'r2',status_date:'2025-03-27',status_text:'Closed 2 positions & working on onboarding process',anticipation:'Onboarding Mon/Early next week',created_at:'2025-03-27'},
+  {id:'s7',requisition_id:'r2',status_date:'2025-03-24',status_text:'1 Select (Rashmi for senior PO), other scheduled. Got verbal communication',anticipation:'',created_at:'2025-03-24'},
+  {id:'s8',requisition_id:'r2',status_date:'2025-03-23',status_text:'Got slots for 2 candidates - 03/24 & 03/26',anticipation:'',created_at:'2025-03-23'},
+  {id:'s9',requisition_id:'r2',status_date:'2025-03-17',status_text:'Shared profiles',anticipation:'',created_at:'2025-03-17'},
+  {id:'s10',requisition_id:'r6',status_date:'2025-03-27',status_text:'1 In Client round & 2 Need client slots',anticipation:'No hopes on closures',created_at:'2025-03-27'},
+  {id:'s11',requisition_id:'r6',status_date:'2025-03-26',status_text:'6 Evaluations done - 3 select for next round',anticipation:'',created_at:'2025-03-26'},
+  {id:'s12',requisition_id:'r6',status_date:'2025-03-24',status_text:'Got slots for 12 folks',anticipation:'',created_at:'2025-03-24'},
+  {id:'s13',requisition_id:'r6',status_date:'2025-03-17',status_text:'Planning to share 09 profiles',anticipation:'',created_at:'2025-03-17'},
+  {id:'s14',requisition_id:'r7',status_date:'2025-03-27',status_text:'1 Select out of 3 & Need more profiles',anticipation:'',created_at:'2025-03-27'},
+  {id:'s15',requisition_id:'r7',status_date:'2025-03-26',status_text:'2 Interviews done, 1 select for next round',anticipation:'',created_at:'2025-03-26'},
+  {id:'s16',requisition_id:'r23',status_date:'2025-04-02',status_text:'SF Architect: Shared 4 profiles. Python+AI: Awaiting feedback. 2 Backfill interviews in place',anticipation:'Python+AI shall close one of 3',created_at:'2025-04-02'},
+  {id:'s17',requisition_id:'r24',status_date:'2025-04-02',status_text:'Identified Resources & Working on onboarding Process',anticipation:'In Onboarding discussion',created_at:'2025-04-02'},
+  {id:'s18',requisition_id:'r24',status_date:'2025-04-01',status_text:'In Onboarding discussion',anticipation:'',created_at:'2025-04-01'},
+  {id:'s19',requisition_id:'r25',status_date:'2025-04-02',status_text:'Ciklum TA working on high priority tasks. Need time to move forward',anticipation:'No hopes',created_at:'2025-04-02'},
+  {id:'s20',requisition_id:'r25',status_date:'2025-04-01',status_text:'No News from Client',anticipation:'',created_at:'2025-04-01'},
+  {id:'s21',requisition_id:'r26',status_date:'2025-04-02',status_text:'Shared 5 profiles on 04/01, 1 Candidate Reject',anticipation:'',created_at:'2025-04-02'},
+  {id:'s22',requisition_id:'r27',status_date:'2025-04-02',status_text:'1 R2 clear & put across client round',anticipation:'Targeting to close in April',created_at:'2025-04-02'},
+  {id:'s23',requisition_id:'r34',status_date:'2025-04-02',status_text:'Client Select & Awaiting Final feedback',anticipation:'Expecting L1 Selection',created_at:'2025-04-02'},
+  {id:'s24',requisition_id:'r36',status_date:'2025-04-01',status_text:'Select - got the confirmation',anticipation:'Onboarding 3-4 weeks',created_at:'2025-04-01'},
 ];
 
-/* —— Store shape —— */
+/* ââ Store shape ââ */
 interface StaffingState {
   accounts: StaffingAccount[];
   requisitions: StaffingRequisition[];
