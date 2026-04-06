@@ -1,16 +1,16 @@
 // @ts-nocheck
-import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import {
   Users, Plus, Trash2, Pencil, Building2, ChevronDown, ChevronRight,
-  Globe, TrendingUp, CheckCircle, AlertTriangle, Clock,
+  Globe, TrendingUp, CheckCircle, AlertTriangle, Clock, Brain,
 } from 'lucide-react';
 import { useUSStaffingStore } from '../store/useUSStaffingStore';
 import { PageHeader } from '../components/shared/PageHeader';
-import { Card, StatCard } from '../components/ui';
+import { Card, StatCard, StatusBadge } from '../components/ui';
 import type { USStaffingStage, AccountCategory } from '../types/usStaffing';
 import { US_STAGE_COLORS } from '../types/usStaffing';
 
-/* ââ Editable Cell Component ââ */
+/* —— Editable Cell Component —— */
 function EditableCell({ value, onSave, type = 'text', options, className = '', displayContent }: {
   value: string | number;
   onSave: (val: string | number) => void;
@@ -78,15 +78,15 @@ function EditableCell({ value, onSave, type = 'text', options, className = '', d
   );
 }
 
-/* ââ Constants ââ */
+/* —— Constants —— */
 const ALL_STAGES: USStaffingStage[] = ['New','Sourcing','Profiles Shared','Interview','Shortlisted','Client Round','Closed/Selected','Onboarding','On Hold','Cancelled'];
 const CATEGORIES: AccountCategory[] = ['MSP', 'SI'];
 
-/* ââ Main Component ââ */
+/* —— Main Component —— */
 export default function USStaffingPage() {
   const { accounts, requisitions, addAccount, removeAccount, addRequisition, updateRequisition, removeRequisition } = useUSStaffingStore();
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'msp' | 'si' | 'all'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'msp' | 'si' | 'all' | 'forecast'>('overview');
   const [showAddReq, setShowAddReq] = useState(false);
   const [showAddAccount, setShowAddAccount] = useState(false);
   const [filterStage, setFilterStage] = useState<string>('All');
@@ -112,7 +112,7 @@ export default function USStaffingPage() {
     });
   };
 
-  /* ââ Derived data ââ */
+  /* —— Derived data —— */
   const mspAccounts = useMemo(() => accounts.filter(a => a.category === 'MSP'), [accounts]);
   const siAccounts = useMemo(() => accounts.filter(a => a.category === 'SI'), [accounts]);
 
@@ -169,7 +169,46 @@ export default function USStaffingPage() {
     updateRequisition(id, { [field]: val });
   }, [updateRequisition]);
 
-  /* ââ Render grouped by account ââ */
+  /* —— AI Scoring for forecast —— */
+  const scoreReq = (req: typeof reqsWithAccount[0]) => {
+    const stageScores: Record<string, number> = {
+      'New': 15, 'Sourcing': 25, 'Profiles Shared': 35, 'Interview': 50,
+      'Shortlisted': 60, 'Client Round': 75, 'Closed/Selected': 90, 'Onboarding': 95,
+      'On Hold': 20, 'Cancelled': 5,
+    };
+    let score = stageScores[req.stage] || 30;
+    const notes = (req.notes || '').toLowerCase();
+    if (notes.includes('final round') || notes.includes('selected')) score += 10;
+    if (notes.includes('shortlisted')) score += 5;
+    if (notes.includes('no response') || notes.includes('stalled')) score -= 10;
+    if (notes.includes('reject')) score -= 15;
+    if (req.closure_date) {
+      const daysLeft = Math.ceil((new Date(req.closure_date).getTime() - Date.now()) / 86400000);
+      if (daysLeft < 0) score -= 10;
+      else if (daysLeft < 7) score += 5;
+    }
+    return Math.max(5, Math.min(95, score));
+  };
+
+  const scoredReqs = useMemo(() =>
+    reqsWithAccount.map(r => ({ ...r, closureProb: scoreReq(r), risk: scoreReq(r) >= 65 ? 'low' as const : scoreReq(r) <= 35 ? 'high' as const : 'medium' as const })),
+    [reqsWithAccount]
+  );
+
+  const forecastFiltered = useMemo(() => {
+    let data = scoredReqs;
+    if (activeTab === 'forecast') return data;
+    return data;
+  }, [scoredReqs, activeTab]);
+
+  const fTotalReqs = scoredReqs.length;
+  const fOptimistic = scoredReqs.filter(r => r.closureProb >= 40).length;
+  const fRealistic = scoredReqs.filter(r => r.closureProb >= 60).length;
+  const fConservative = scoredReqs.filter(r => r.closureProb >= 75).length;
+  const fAtRisk = scoredReqs.filter(r => r.risk === 'high').length;
+  const fAvgProb = scoredReqs.length ? Math.round(scoredReqs.reduce((s, r) => s + r.closureProb, 0) / scoredReqs.length) : 0;
+
+  /* —— Render grouped by account —— */
   const renderAccountGroup = (acctList: typeof accounts, categoryLabel: string) => {
     const groupReqs = filteredReqs.filter(r => acctList.some(a => a.id === r.account_id));
     if (groupReqs.length === 0 && activeTab !== 'all' && activeTab !== 'overview') return null;
@@ -253,7 +292,7 @@ export default function USStaffingPage() {
     );
   };
 
-  /* ââ Overview Tab ââ */
+  /* —— Overview Tab —— */
   const renderOverview = () => (
     <div className="space-y-6">
       {/* Stats */}
@@ -324,7 +363,7 @@ export default function USStaffingPage() {
     </div>
   );
 
-  /* ââ Requisitions Tab (All / MSP / SI) ââ */
+  /* —— Requisitions Tab (All / MSP / SI) —— */
   const renderRequisitions = () => (
     <div className="space-y-4">
       {/* Filter bar */}
@@ -430,7 +469,7 @@ export default function USStaffingPage() {
     </div>
   );
 
-  /* ââ Page ââ */
+  /* —— Page —— */
   return (
     <div className="space-y-6">
       <PageHeader
@@ -445,6 +484,7 @@ export default function USStaffingPage() {
           { key: 'all', label: 'All Requisitions' },
           { key: 'msp', label: 'MSP' },
           { key: 'si', label: 'SI' },
+          { key: 'forecast', label: 'AI Forecast' },
         ].map(tab => (
           <button
             key={tab.key}
@@ -459,7 +499,92 @@ export default function USStaffingPage() {
       </div>
 
       {/* Tab Content */}
-      {activeTab === 'overview' ? renderOverview() : renderRequisitions()}
+      {activeTab === 'forecast' ? (
+        <>
+          <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-6 mb-6 text-white">
+            <div className="flex items-center gap-2 mb-1">
+              <Brain size={18} />
+              <h2 className="font-bold text-base">AI-Powered Closure Forecast</h2>
+              <span className="bg-gradient-to-r from-violet-500 to-blue-500 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide">AI Insights</span>
+            </div>
+            <p className="text-slate-400 text-xs mb-5">Based on pipeline stage, notes sentiment, and closure timeline</p>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              {[
+                { label: 'Total Roles', val: fTotalReqs, color: '#94a3b8', conf: 100 },
+                { label: 'Optimistic', val: fOptimistic, color: '#10b981', conf: 40, desc: 'Prob >= 40%' },
+                { label: 'Realistic', val: fRealistic, color: '#3b82f6', conf: 70, desc: 'Prob >= 60%' },
+                { label: 'Conservative', val: fConservative, color: '#f59e0b', conf: 90, desc: 'Prob >= 75%' },
+                { label: 'At Risk', val: fAtRisk, color: '#ef4444', conf: 85, desc: 'High risk' },
+              ].map((s) => (
+                <div key={s.label} className="bg-white/5 border border-white/10 rounded-lg p-4">
+                  <h4 className="text-blue-300 text-xs font-semibold mb-2">{s.label}</h4>
+                  <div className="text-2xl font-extrabold mb-1" style={{ color: s.color }}>{s.val} <span className="text-sm text-slate-400 font-normal">of {fTotalReqs}</span></div>
+                  {s.desc && <p className="text-[10px] text-slate-500">{s.desc}</p>}
+                  <div className="h-1 bg-white/10 rounded mt-2 overflow-hidden"><div className="h-full rounded" style={{ width: `${s.conf}%`, background: s.color }} /></div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 text-center">
+              <span className="text-slate-300 text-sm font-semibold">Average Closure Probability: </span>
+              <span className="text-xl font-extrabold" style={{ color: fAvgProb >= 60 ? '#10b981' : fAvgProb >= 40 ? '#f59e0b' : '#ef4444' }}>{fAvgProb}%</span>
+            </div>
+          </div>
+
+          <Card>
+            <h3 className="font-bold text-sm mb-3">Forecast by Requisition</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b-2 border-slate-100">
+                    <th className="text-left p-2 text-slate-400 font-bold uppercase text-[10px]">Account</th>
+                    <th className="text-left p-2 text-slate-400 font-bold uppercase text-[10px]">Role</th>
+                    <th className="text-left p-2 text-slate-400 font-bold uppercase text-[10px]">Stage</th>
+                    <th className="text-left p-2 text-slate-400 font-bold uppercase text-[10px]">Prob</th>
+                    <th className="text-left p-2 text-slate-400 font-bold uppercase text-[10px]">Risk</th>
+                    <th className="text-left p-2 text-slate-400 font-bold uppercase text-[10px]">Closure Date</th>
+                    <th className="text-left p-2 text-slate-400 font-bold uppercase text-[10px]">Recommendation</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...scoredReqs].sort((a, b) => b.closureProb - a.closureProb).map(req => {
+                    let rec = 'Monitor progress';
+                    if (req.risk === 'high') rec = 'Escalate - add more profiles & parallel source';
+                    else if (req.stage === 'New' || req.stage === 'Sourcing') rec = 'Accelerate sourcing - increase pipeline';
+                    else if (req.stage === 'Client Round') rec = 'Follow up with client for feedback';
+                    else if (req.stage === 'Onboarding' || req.stage === 'Closed/Selected') rec = 'Track onboarding timeline';
+                    else if (req.stage === 'On Hold') rec = 'Re-engage - check if requirement is still active';
+                    const probColor = req.closureProb >= 65 ? '#10b981' : req.closureProb >= 40 ? '#f59e0b' : '#ef4444';
+                    return (
+                      <tr key={req.id} className="border-b border-slate-50 hover:bg-slate-50/50">
+                        <td className="p-2 font-bold">{req.account_name}</td>
+                        <td className="p-2">{req.role}</td>
+                        <td className="p-2">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white" style={{ background: US_STAGE_COLORS[req.stage as USStaffingStage] || '#94a3b8' }}>
+                            {req.stage}
+                          </span>
+                        </td>
+                        <td className="p-2">
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-10 h-1.5 rounded bg-slate-100 overflow-hidden">
+                              <div className="h-full rounded" style={{ width: `${req.closureProb}%`, background: probColor }} />
+                            </div>
+                            <span className="font-bold">{req.closureProb}%</span>
+                          </div>
+                        </td>
+                        <td className="p-2">
+                          <StatusBadge status={req.risk === 'high' ? 'at-risk' : req.risk === 'medium' ? 'caution' : 'on-track'} label={req.risk} />
+                        </td>
+                        <td className="p-2 text-slate-500">{req.closure_date || 'TBD'}</td>
+                        <td className="p-2 text-slate-500">{rec}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </>
+      ) : activeTab === 'overview' ? renderOverview() : renderRequisitions()}
     </div>
   );
 }

@@ -20,12 +20,13 @@ export interface StaffingRequisition {
   title: string;
   month: string;
   new_positions: number;
-  backfills: number;
   expected_closure: string;
   close_by_date: string;
   status_field: StaffingStatus;
   stage: PipelineStage;
   anticipation: string;
+  client_spoc: string;
+  department: string;
   created_at: string;
   updated_at: string;
 }
@@ -57,8 +58,6 @@ export interface StaffingRow {
   account_id: string;
   requisition: string;
   newPositions: number;
-  backfills: number;
-  totalPositions: number;
   expectedClosure: string;
   closeByDate: string;
   statusField: StaffingStatus;
@@ -68,6 +67,8 @@ export interface StaffingRow {
   risk: RiskLevel;
   stage: PipelineStage;
   velocity: number;
+  clientSpoc: string;
+  department: string;
 }
 
 export const MONTHS = [
