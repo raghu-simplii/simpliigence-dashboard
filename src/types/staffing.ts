@@ -27,6 +27,7 @@ export interface StaffingRequisition {
   anticipation: string;
   client_spoc: string;
   department: string;
+  location: string;
   created_at: string;
   updated_at: string;
 }
@@ -69,6 +70,7 @@ export interface StaffingRow {
   velocity: number;
   clientSpoc: string;
   department: string;
+  location: string;
 }
 
 export const MONTHS = [

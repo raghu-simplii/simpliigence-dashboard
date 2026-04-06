@@ -9,7 +9,7 @@ import { PageHeader } from '../components/shared/PageHeader';
 import { Card, StatCard } from '../components/ui';
 import type { VisaCategory, JobPriority } from '../types/openBench';
 
-/* ââ Editable Cell Component ââ */
+/* —— Editable Cell Component —— */
 function EditableCell({ value, onSave, type = 'text', options, className = '', displayContent }: {
   value: string | number;
   onSave: (val: string | number) => void;
@@ -77,7 +77,7 @@ function EditableCell({ value, onSave, type = 'text', options, className = '', d
   );
 }
 
-/* ââ Constants ââ */
+/* —— Constants —— */
 const VISA_CATEGORIES: VisaCategory[] = ['H1B','L1','L2 EAD','H4 EAD','GC','GC EAD','US Citizen','OPT','CPT','TN','Other'];
 const JOB_PRIORITIES: JobPriority[] = ['Primary', 'Secondary'];
 
@@ -87,7 +87,7 @@ const VISA_COLORS: Record<string, string> = {
   'OPT': '#f59e0b', 'CPT': '#fbbf24', 'TN': '#06b6d4', 'Other': '#94a3b8',
 };
 
-/* ââ Main Component ââ */
+/* —— Main Component —— */
 export default function OpenBenchPage() {
   const { resources, addResource, updateResource, removeResource } = useOpenBenchStore();
 
@@ -107,8 +107,10 @@ export default function OpenBenchPage() {
   const [newPriority, setNewPriority] = useState<JobPriority>('Primary');
   const [newRate, setNewRate] = useState<number>(0);
   const [newNotes, setNewNotes] = useState('');
+  const [newLocation, setNewLocation] = useState('');
+  const [newKeyOpps, setNewKeyOpps] = useState('');
 
-  /* ââ Derived data ââ */
+  /* —— Derived data —— */
   const filteredResources = useMemo(() => {
     let data = resources.filter(r => r.available);
     if (searchTerm) {
@@ -116,7 +118,8 @@ export default function OpenBenchPage() {
       data = data.filter(r =>
         r.resource_name.toLowerCase().includes(q) ||
         r.primary_skill.toLowerCase().includes(q) ||
-        r.roles.toLowerCase().includes(q)
+        r.roles.toLowerCase().includes(q) ||
+        (r.location || '').toLowerCase().includes(q)
       );
     }
     if (filterVisa !== 'All') data = data.filter(r => r.visa_category === filterVisa);
@@ -161,11 +164,13 @@ export default function OpenBenchPage() {
       roles: newRoles,
       job_priority: newPriority,
       target_rate: newRate,
+      location: newLocation,
+      key_opportunities: newKeyOpps,
       notes: newNotes,
       available: true,
     });
     setNewName(''); setNewYOE(0); setNewVisa('H1B'); setNewSkill(''); setNewRoles('');
-    setNewPriority('Primary'); setNewRate(0); setNewNotes('');
+    setNewPriority('Primary'); setNewRate(0); setNewNotes(''); setNewLocation(''); setNewKeyOpps('');
     setShowAddForm(false);
   };
 
@@ -180,7 +185,7 @@ export default function OpenBenchPage() {
 
   const SortHeader = ({ field, label }: { field: string; label: string }) => (
     <th className="px-3 py-2 text-left font-semibold cursor-pointer hover:text-slate-700 select-none" onClick={() => handleSort(field)}>
-      {label} {sortField === field && (sortAsc ? 'â' : 'â')}
+      {label} {sortField === field && (sortAsc ? '↑' : '↓')}
     </th>
   );
 
@@ -309,6 +314,16 @@ export default function OpenBenchPage() {
                   className="w-full text-xs border rounded px-2 py-1.5 mt-0.5" />
               </div>
               <div>
+                <label className="text-[10px] uppercase text-slate-500 font-semibold">Location</label>
+                <input value={newLocation} onChange={e => setNewLocation(e.target.value)} placeholder="e.g. Dallas, TX"
+                  className="w-full text-xs border rounded px-2 py-1.5 mt-0.5" />
+              </div>
+              <div>
+                <label className="text-[10px] uppercase text-slate-500 font-semibold">Key Opportunities</label>
+                <input value={newKeyOpps} onChange={e => setNewKeyOpps(e.target.value)} placeholder="e.g. TEKsystems Java role"
+                  className="w-full text-xs border rounded px-2 py-1.5 mt-0.5" />
+              </div>
+              <div>
                 <label className="text-[10px] uppercase text-slate-500 font-semibold">Notes</label>
                 <input value={newNotes} onChange={e => setNewNotes(e.target.value)} placeholder="Optional"
                   className="w-full text-xs border rounded px-2 py-1.5 mt-0.5" />
@@ -335,6 +350,8 @@ export default function OpenBenchPage() {
                 <th className="px-3 py-2 text-left font-semibold">Roles</th>
                 <SortHeader field="job_priority" label="Priority" />
                 <SortHeader field="target_rate" label="Target Rate" />
+                <SortHeader field="location" label="Location" />
+                <th className="px-3 py-2 text-left font-semibold">Key Opportunities</th>
                 <th className="px-3 py-2 text-left font-semibold">Notes</th>
                 <th className="px-3 py-2 text-center font-semibold w-16">Actions</th>
               </tr>
@@ -382,6 +399,12 @@ export default function OpenBenchPage() {
                       displayContent={<span className="font-semibold text-green-700">${r.target_rate}/hr</span>}
                     />
                   </td>
+                  <td className="px-3 py-2">
+                    <EditableCell value={r.location || ''} onSave={v => handleCellSave(r.id, 'location', v)} />
+                  </td>
+                  <td className="px-3 py-2 max-w-[180px]">
+                    <EditableCell value={r.key_opportunities || ''} onSave={v => handleCellSave(r.id, 'key_opportunities', v)} />
+                  </td>
                   <td className="px-3 py-2 max-w-[160px]">
                     <EditableCell value={r.notes} type="textarea" onSave={v => handleCellSave(r.id, 'notes', v)} />
                   </td>
@@ -393,7 +416,7 @@ export default function OpenBenchPage() {
                 </tr>
               ))}
               {filteredResources.length === 0 && (
-                <tr><td colSpan={9} className="px-3 py-8 text-center text-slate-400">No resources found matching filters</td></tr>
+                <tr><td colSpan={11} className="px-3 py-8 text-center text-slate-400">No resources found matching filters</td></tr>
               )}
             </tbody>
           </table>

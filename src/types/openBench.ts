@@ -24,6 +24,8 @@ export interface BenchResource {
   roles: string;
   job_priority: JobPriority;
   target_rate: number;
+  location: string;
+  key_opportunities: string;
   notes: string;
   available: boolean;
   created_at: string;

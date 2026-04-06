@@ -105,7 +105,7 @@ export default function IndiaStaffingPage() {
         closeByDate: req.close_by_date || '', statusField: req.status_field || 'Open',
         status: combinedStatus, anticipation: latestAnticipation,
         closureProb: analysis.score, risk: analysis.risk, stage: req.stage || analysis.stage, velocity: analysis.velocity,
-        clientSpoc: req.client_spoc || '', department: req.department || '',
+        clientSpoc: req.client_spoc || '', department: req.department || '', location: req.location || '',
       };
     });
   }, [requisitions, statuses, accounts]);
@@ -142,6 +142,7 @@ export default function IndiaStaffingPage() {
       case 'new_positions': patch.new_positions = Number(value); break;
       case 'client_spoc': patch.client_spoc = value; break;
       case 'department': patch.department = value; break;
+      case 'location': patch.location = value; break;
       case 'expected_closure': patch.expected_closure = value; break;
       case 'close_by_date': patch.close_by_date = value; break;
       case 'status_field': patch.status_field = value; break;
@@ -295,6 +296,7 @@ export default function IndiaStaffingPage() {
                     <th className="text-center p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Pos</th>
                     <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Client SPOC</th>
                     <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Department</th>
+                    <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Location</th>
                     <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Status</th>
                     <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Stage</th>
                     <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Risk</th>
@@ -342,6 +344,10 @@ export default function IndiaStaffingPage() {
                           {/* Department */}
                           <td className="p-2">
                             <EditableCell value={r.department} onSave={(val) => handleCellSave(r.id, 'department', val)} />
+                          </td>
+                          {/* Location */}
+                          <td className="p-2">
+                            <EditableCell value={r.location} onSave={(val) => handleCellSave(r.id, 'location', val)} />
                           </td>
                           {/* Status */}
                           <td className="p-2">
@@ -406,7 +412,7 @@ export default function IndiaStaffingPage() {
                         {/* Expanded status history */}
                         {isExpanded && (
                           <tr key={`${r.id}-exp`}>
-                            <td colSpan={14} className="bg-slate-50/80 p-0">
+                            <td colSpan={15} className="bg-slate-50/80 p-0">
                               <div className="px-8 py-3">
                                 <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Status History</div>
                                 {reqStatuses.length === 0 && <p className="text-xs text-slate-400 italic">No status updates yet</p>}
