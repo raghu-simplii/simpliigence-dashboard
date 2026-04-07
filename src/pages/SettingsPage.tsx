@@ -1,13 +1,14 @@
 import { useForecastStore, useFinancialStore } from '../store';
 import { Button, Card } from '../components/ui';
 import { PageHeader } from '../components/shared/PageHeader';
-import { Download, Trash2, FileSpreadsheet, Check, Brain } from 'lucide-react';
+import { Download, Trash2, FileSpreadsheet, Check, Brain, ShieldCheck, Upload, Clock } from 'lucide-react';
 import { loadSeedIntoStores } from '../data/employeeSeed';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { ConfirmDialog } from '../components/ui';
 import { deriveEmployeeSummaries, deriveProjectSummaries } from '../lib/parseSpreadsheet';
 import { db } from '../lib/supabaseSync';
 import { getClaudeApiKey, setClaudeApiKey } from '../lib/claudeQuery';
+import { downloadBackup, restoreFromBackup, getLastBackupTime } from '../lib/backup';
 
 export default function SettingsPage() {
   const forecastStore = useForecastStore();
@@ -15,8 +16,13 @@ export default function SettingsPage() {
   const { settings, updateSettings } = financialStore;
   const [confirmClear, setConfirmClear] = useState(false);
   const [confirmSeed, setConfirmSeed] = useState(false);
+  const [confirmRestore, setConfirmRestore] = useState(false);
   const [claudeKey, setClaudeKey] = useState(getClaudeApiKey());
   const [keyVisible, setKeyVisible] = useState(false);
+  const [backupStatus, setBackupStatus] = useState<string | null>(null);
+  const [restoreFile, setRestoreFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const lastBackup = getLastBackupTime();
 
   const employees = deriveEmployeeSummaries(forecastStore.assignments);
   const projects = deriveProjectSummaries(forecastStore.assignments);
@@ -166,6 +172,68 @@ export default function SettingsPage() {
           </div>
         </Card>
 
+        <Card title="Backup & Restore">
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <ShieldCheck size={16} className="text-emerald-600" />
+              <p className="text-sm text-slate-600">Automatic daily backups run silently. You can also download or restore manually.</p>
+            </div>
+            {lastBackup && (
+              <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2">
+                <Clock size={14} />
+                Last backup: {new Date(lastBackup).toLocaleString()}
+              </div>
+            )}
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-800">Download Full Backup</p>
+                <p className="text-xs text-slate-500">Exports all Supabase tables as a JSON file.</p>
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={async () => {
+                  setBackupStatus('Backing up...');
+                  const ok = await downloadBackup();
+                  setBackupStatus(ok ? 'Backup downloaded!' : 'Backup failed');
+                  setTimeout(() => setBackupStatus(null), 3000);
+                }}
+              >
+                <Download size={14} /> Backup Now
+              </Button>
+            </div>
+            <div className="border-t border-slate-100 pt-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-800">Restore from Backup</p>
+                <p className="text-xs text-slate-500">Upload a previously downloaded backup file to restore data.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".json"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      setRestoreFile(file);
+                      setConfirmRestore(true);
+                    }
+                  }}
+                />
+                <Button size="sm" variant="secondary" onClick={() => fileInputRef.current?.click()}>
+                  <Upload size={14} /> Restore
+                </Button>
+              </div>
+            </div>
+            {backupStatus && (
+              <p className={`text-xs font-medium ${backupStatus.includes('failed') ? 'text-red-600' : 'text-emerald-600'}`}>
+                {backupStatus}
+              </p>
+            )}
+          </div>
+        </Card>
+
         <Card title="Data Management">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -215,6 +283,28 @@ export default function SettingsPage() {
         confirmLabel="Load Data"
         onConfirm={() => { setConfirmSeed(false); loadSeedIntoStores(); }}
         onCancel={() => setConfirmSeed(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmRestore}
+        title="Restore from Backup?"
+        message={`This will replace ALL current data with the backup file "${restoreFile?.name}". This cannot be undone. Download a backup first if needed.`}
+        confirmLabel="Restore"
+        onConfirm={async () => {
+          setConfirmRestore(false);
+          if (!restoreFile) return;
+          setBackupStatus('Restoring...');
+          const result = await restoreFromBackup(restoreFile);
+          if (result.success) {
+            setBackupStatus('Restore complete! Reloading...');
+            setTimeout(() => window.location.reload(), 1500);
+          } else {
+            setBackupStatus(`Restore failed: ${result.error}`);
+            setTimeout(() => setBackupStatus(null), 5000);
+          }
+          setRestoreFile(null);
+        }}
+        onCancel={() => { setConfirmRestore(false); setRestoreFile(null); }}
       />
     </div>
   );

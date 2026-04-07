@@ -15,6 +15,7 @@ import {
   setupRealtimeSubscriptions,
   db,
 } from './lib/supabaseSync';
+import { autoBackupIfNeeded } from './lib/backup';
 
 /**
  * On app start:
@@ -174,6 +175,9 @@ function useSupabaseInit() {
         });
 
         console.log('[supabase] Initialized — data loaded and realtime subscriptions active');
+
+        // Run daily auto-backup after successful init
+        autoBackupIfNeeded().catch(() => {});
       } catch (err) {
         console.warn('[supabase] Init failed, using local data:', err);
       } finally {
