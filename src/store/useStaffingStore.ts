@@ -42,21 +42,10 @@ const SEED_REQS: StaffingRequisition[] = [
   {id:'r20',account_id:'acct-5',title:'SF Vlocity',month:'March',new_positions:1,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'No hopes. Expecting L1 Selection',client_spoc:'',department:'',location:'',created_at:'2025-03-01',updated_at:'2025-03-18'},
   {id:'r21',account_id:'acct-6',title:'SF Developer',month:'March',new_positions:1,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Expecting client discussion',client_spoc:'',department:'',location:'',created_at:'2025-03-01',updated_at:'2025-03-27'},
   {id:'r22',account_id:'acct-6',title:'SF Service Cloud CTI',month:'March',new_positions:1,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Expecting client discussion',client_spoc:'',department:'',location:'',created_at:'2025-03-01',updated_at:'2025-03-23'},
-  // April
+  // April — only genuinely NEW positions (not carried over from March)
   {id:'r23',account_id:'acct-1',title:'SF Architect / Python+AI / Solution Architect',month:'April',new_positions:3,expected_closure:'7th April',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Python+AI shall close one of 3 proposed',client_spoc:'',department:'',location:'',created_at:'2025-04-01',updated_at:'2025-04-02'},
-  {id:'r24',account_id:'acct-2',title:'Product Owner',month:'April',new_positions:2,expected_closure:'March 31st (Carried)',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'In Onboarding discussion',client_spoc:'',department:'',location:'',created_at:'2025-04-01',updated_at:'2025-04-02'},
-  {id:'r25',account_id:'acct-3',title:'Java',month:'April',new_positions:10,expected_closure:'TBD',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'No hopes. No hopes on closures',client_spoc:'',department:'',location:'',created_at:'2025-04-01',updated_at:'2025-04-02'},
-  {id:'r26',account_id:'acct-4',title:'Support',month:'April',new_positions:3,expected_closure:'10th April',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Profiles shared, awaiting feedback',client_spoc:'',department:'',location:'',created_at:'2025-04-01',updated_at:'2025-04-02'},
-  {id:'r27',account_id:'acct-4',title:'Developer',month:'April',new_positions:6,expected_closure:'24th April',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Targeting to close in April',client_spoc:'',department:'',location:'',created_at:'2025-04-01',updated_at:'2025-04-02'},
-  {id:'r28',account_id:'acct-4',title:'Lead',month:'April',new_positions:1,expected_closure:'10th April',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Early stage',client_spoc:'',department:'',location:'',created_at:'2025-04-01',updated_at:'2025-04-02'},
-  {id:'r29',account_id:'acct-5',title:'CPQ Architect + AI',month:'April',new_positions:1,expected_closure:'TBD',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'No hopes. Expecting more slots',client_spoc:'',department:'',location:'',created_at:'2025-04-01',updated_at:'2025-03-26'},
-  {id:'r30',account_id:'acct-5',title:'Dev Lead - Salescloud, CPQ',month:'April',new_positions:1,expected_closure:'TBD',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'No hopes. Expecting at least 1 to hit',client_spoc:'',department:'',location:'',created_at:'2025-04-01',updated_at:'2025-03-26'},
-  {id:'r31',account_id:'acct-5',title:'Service Cloud Voice Tech Lead + Architect',month:'April',new_positions:2,expected_closure:'TBD',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'No Hopes. R1 should clear',client_spoc:'',department:'',location:'',created_at:'2025-04-01',updated_at:'2025-03-27'},
-  {id:'r32',account_id:'acct-5',title:'SF Architect (Sales, Conga CPQ, CLM)',month:'April',new_positions:1,expected_closure:'TBD',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'No hopes',client_spoc:'',department:'',location:'',created_at:'2025-04-01',updated_at:'2025-03-27'},
-  {id:'r33',account_id:'acct-5',title:'SF Automation QA (ACCELQ)',month:'April',new_positions:1,expected_closure:'TBD',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Expecting the slots',client_spoc:'',department:'',location:'',created_at:'2025-04-01',updated_at:'2025-04-02'},
-  {id:'r34',account_id:'acct-5',title:'Salesforce Agentforce (7+ Yrs)',month:'April',new_positions:1,expected_closure:'TBD',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'No hopes to hopes. Expecting L1 Selection',client_spoc:'',department:'',location:'',created_at:'2025-04-01',updated_at:'2025-04-02'},
-  {id:'r35',account_id:'acct-6',title:'SF Developer',month:'April',new_positions:1,expected_closure:'April 10th',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Reject',client_spoc:'',department:'',location:'',created_at:'2025-04-01',updated_at:'2025-04-01'},
-  {id:'r36',account_id:'acct-6',title:'SF Service Cloud CTI',month:'April',new_positions:1,expected_closure:'TBD',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Onboarding - 3 to 4 weeks',client_spoc:'',department:'',location:'',created_at:'2025-04-01',updated_at:'2025-04-01'},
+  // NOTE: Carried-over positions (Amex PO, Ciklum Java, Ness Support/Dev/Lead, Persistent roles, Merck roles)
+  // are NOT duplicated here. They stay as the original March rows and get status updates linked to them.
 ];
 
 const SEED_STATUSES: DailyStatus[] = [
@@ -75,15 +64,16 @@ const SEED_STATUSES: DailyStatus[] = [
   {id:'s13',requisition_id:'r6',status_date:'2025-03-17',status_text:'Planning to share 09 profiles',anticipation:'',created_at:'2025-03-17'},
   {id:'s14',requisition_id:'r7',status_date:'2025-03-27',status_text:'1 Select out of 3 & Need more profiles',anticipation:'',created_at:'2025-03-27'},
   {id:'s15',requisition_id:'r7',status_date:'2025-03-26',status_text:'2 Interviews done, 1 select for next round',anticipation:'',created_at:'2025-03-26'},
+  // April statuses — linked to ORIGINAL March requisition IDs (no duplicates)
   {id:'s16',requisition_id:'r23',status_date:'2025-04-02',status_text:'SF Architect: Shared 4 profiles. Python+AI: Awaiting feedback. 2 Backfill interviews in place',anticipation:'Python+AI shall close one of 3',created_at:'2025-04-02'},
-  {id:'s17',requisition_id:'r24',status_date:'2025-04-02',status_text:'Identified Resources & Working on onboarding Process',anticipation:'In Onboarding discussion',created_at:'2025-04-02'},
-  {id:'s18',requisition_id:'r24',status_date:'2025-04-01',status_text:'In Onboarding discussion',anticipation:'',created_at:'2025-04-01'},
-  {id:'s19',requisition_id:'r25',status_date:'2025-04-02',status_text:'Ciklum TA working on high priority tasks. Need time to move forward',anticipation:'No hopes',created_at:'2025-04-02'},
-  {id:'s20',requisition_id:'r25',status_date:'2025-04-01',status_text:'No News from Client',anticipation:'',created_at:'2025-04-01'},
-  {id:'s21',requisition_id:'r26',status_date:'2025-04-02',status_text:'Shared 5 profiles on 04/01, 1 Candidate Reject',anticipation:'',created_at:'2025-04-02'},
-  {id:'s22',requisition_id:'r27',status_date:'2025-04-02',status_text:'1 R2 clear & put across client round',anticipation:'Targeting to close in April',created_at:'2025-04-02'},
-  {id:'s23',requisition_id:'r34',status_date:'2025-04-02',status_text:'Client Select & Awaiting Final feedback',anticipation:'Expecting L1 Selection',created_at:'2025-04-02'},
-  {id:'s24',requisition_id:'r36',status_date:'2025-04-01',status_text:'Select - got the confirmation',anticipation:'Onboarding 3-4 weeks',created_at:'2025-04-01'},
+  {id:'s17',requisition_id:'r2',status_date:'2025-04-02',status_text:'Identified Resources & Working on onboarding Process',anticipation:'In Onboarding discussion',created_at:'2025-04-02'},
+  {id:'s18',requisition_id:'r2',status_date:'2025-04-01',status_text:'In Onboarding discussion',anticipation:'',created_at:'2025-04-01'},
+  {id:'s19',requisition_id:'r6',status_date:'2025-04-02',status_text:'Ciklum TA working on high priority tasks. Need time to move forward',anticipation:'No hopes',created_at:'2025-04-02'},
+  {id:'s20',requisition_id:'r6',status_date:'2025-04-01',status_text:'No News from Client',anticipation:'',created_at:'2025-04-01'},
+  {id:'s21',requisition_id:'r7',status_date:'2025-04-02',status_text:'Shared 5 profiles on 04/01, 1 Candidate Reject',anticipation:'',created_at:'2025-04-02'},
+  {id:'s22',requisition_id:'r8',status_date:'2025-04-02',status_text:'1 R2 clear & put across client round',anticipation:'Targeting to close in April',created_at:'2025-04-02'},
+  {id:'s23',requisition_id:'r19',status_date:'2025-04-02',status_text:'Client Select & Awaiting Final feedback',anticipation:'Expecting L1 Selection',created_at:'2025-04-02'},
+  {id:'s24',requisition_id:'r22',status_date:'2025-04-01',status_text:'Select - got the confirmation',anticipation:'Onboarding 3-4 weeks',created_at:'2025-04-01'},
 ];
 
 /* ââ Store shape ââ */
@@ -179,9 +169,28 @@ export const useStaffingStore = create<StaffingState>()(
               acct = { id: nanoid(), name: row.account, created_at: new Date().toISOString() };
               newAccounts.push(acct);
             }
+            // First try exact match (same account + title + month)
             let req = newReqs.find(
               (r) => r.account_id === acct!.id && r.title === row.requisition && r.month === row.month,
             );
+            // If no exact match, look for same account + title that's still open (carried-over position)
+            if (!req) {
+              req = newReqs.find(
+                (r) =>
+                  r.account_id === acct!.id &&
+                  r.title === row.requisition &&
+                  r.status_field !== 'Closed' &&
+                  r.status_field !== 'Cancelled',
+              );
+              if (req) {
+                // Update the existing row's month to the new month (carry forward)
+                req.month = row.month;
+                req.updated_at = new Date().toISOString();
+                if (row.new_positions) req.new_positions = row.new_positions;
+                if (row.expected_closure) req.expected_closure = row.expected_closure;
+                if (row.anticipation) req.anticipation = row.anticipation;
+              }
+            }
             if (!req) {
               const now = new Date().toISOString();
               req = {
@@ -211,6 +220,18 @@ export const useStaffingStore = create<StaffingState>()(
         return { imported, errors };
       },
     }),
-    { name: 'simpliigence-staffing', version: 3 },
+    {
+      name: 'simpliigence-staffing',
+      version: 4,
+      migrate: () => {
+        // v4: Removed duplicate April carry-over requisitions from seed data.
+        // Force re-seed by returning fresh state.
+        return {
+          accounts: SEED_ACCOUNTS,
+          requisitions: SEED_REQS,
+          statuses: SEED_STATUSES,
+        };
+      },
+    },
   ),
 );
