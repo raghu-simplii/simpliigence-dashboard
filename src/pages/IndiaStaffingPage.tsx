@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useRef, useCallback } from 'react';
 import {
   Users, AlertTriangle, TrendingUp, CheckCircle, Upload,
-  Download, Brain, BarChart3, Building2, Pencil, Trash2, Save, X, ChevronDown, ChevronRight,
+  Download, Brain, BarChart3, Building2, Pencil, Trash2, Save, X, ChevronDown, ChevronRight, Plus,
 } from 'lucide-react';
 import { useStaffingStore } from '../store/useStaffingStore';
 import { analyzeStaffingStatus } from '../lib/staffingAnalysis';
@@ -86,6 +86,8 @@ export default function IndiaStaffingPage() {
   const [activeTab, setActiveTab] = useState<'overview' | 'accounts' | 'forecast'>('overview');
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newReq, setNewReq] = useState({ accountId: '', newAccountName: '', title: '', month: 'April', positions: 1, expectedClosure: '', anticipation: '', clientSpoc: '', department: '', location: '' });
   const fileRef = useRef<HTMLInputElement>(null);
 
   /* -- Build enriched rows -- */
@@ -214,6 +216,33 @@ export default function IndiaStaffingPage() {
     a.click();
   };
 
+  const handleAddRequisition = () => {
+    let accountId = newReq.accountId;
+    // Create new account if "new" is selected
+    if (accountId === '__new__' && newReq.newAccountName.trim()) {
+      const acct = addAccount(newReq.newAccountName.trim());
+      accountId = acct.id;
+    }
+    if (!accountId || accountId === '__new__' || !newReq.title.trim()) return;
+
+    addRequisition({
+      account_id: accountId,
+      title: newReq.title.trim(),
+      month: newReq.month,
+      new_positions: newReq.positions,
+      expected_closure: newReq.expectedClosure,
+      close_by_date: '',
+      status_field: 'Open',
+      stage: 'Sourcing',
+      anticipation: newReq.anticipation,
+      client_spoc: newReq.clientSpoc,
+      department: newReq.department,
+      location: newReq.location,
+    });
+    setNewReq({ accountId: '', newAccountName: '', title: '', month: newReq.month, positions: 1, expectedClosure: '', anticipation: '', clientSpoc: '', department: '', location: '' });
+    setShowAddForm(false);
+  };
+
   const tabs = [
     { key: 'overview' as const, label: 'Executive Overview', icon: BarChart3 },
     { key: 'accounts' as const, label: 'Account Deep Dive', icon: Building2 },
@@ -258,7 +287,120 @@ export default function IndiaStaffingPage() {
         <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 text-sm font-medium hover:bg-slate-50">
           <Download size={14} /> Export
         </button>
+        <button onClick={() => setShowAddForm(!showAddForm)} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary-dark shadow-sm">
+          <Plus size={14} /> Add Requisition
+        </button>
       </div>
+
+      {/* Add Requisition Form */}
+      {showAddForm && (
+        <div className="bg-white border border-blue-200 rounded-xl p-5 mb-6 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-slate-800">New Requisition</h3>
+            <button onClick={() => setShowAddForm(false)} className="p-1 rounded hover:bg-slate-100 text-slate-400"><X size={16} /></button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Account */}
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Account</label>
+              <select
+                value={newReq.accountId}
+                onChange={(e) => setNewReq({ ...newReq, accountId: e.target.value, newAccountName: '' })}
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/50"
+              >
+                <option value="">Select account...</option>
+                {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                <option value="__new__">+ Add New Account</option>
+              </select>
+            </div>
+            {/* New Account Name (conditional) */}
+            {newReq.accountId === '__new__' && (
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">New Account Name</label>
+                <input
+                  value={newReq.newAccountName}
+                  onChange={(e) => setNewReq({ ...newReq, newAccountName: e.target.value })}
+                  placeholder="e.g. TCS, Infosys..."
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+              </div>
+            )}
+            {/* Title */}
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Requisition Title</label>
+              <input
+                value={newReq.title}
+                onChange={(e) => setNewReq({ ...newReq, title: e.target.value })}
+                placeholder="e.g. Java Developer, SF Architect..."
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+            {/* Month */}
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Month</label>
+              <select
+                value={newReq.month}
+                onChange={(e) => setNewReq({ ...newReq, month: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/50"
+              >
+                {ALL_MONTHS.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+            {/* Positions */}
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Positions</label>
+              <input
+                type="number" min={1}
+                value={newReq.positions}
+                onChange={(e) => setNewReq({ ...newReq, positions: Number(e.target.value) || 1 })}
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+            {/* Expected Closure */}
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Expected Closure</label>
+              <input
+                value={newReq.expectedClosure}
+                onChange={(e) => setNewReq({ ...newReq, expectedClosure: e.target.value })}
+                placeholder="e.g. April End, TBD..."
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+            {/* Client SPOC */}
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Client SPOC</label>
+              <input
+                value={newReq.clientSpoc}
+                onChange={(e) => setNewReq({ ...newReq, clientSpoc: e.target.value })}
+                placeholder="Contact name..."
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+            {/* Department */}
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Department</label>
+              <input
+                value={newReq.department}
+                onChange={(e) => setNewReq({ ...newReq, department: e.target.value })}
+                placeholder="e.g. Engineering..."
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 mt-4">
+            <button onClick={() => setShowAddForm(false)} className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-medium text-slate-600 hover:bg-slate-50">
+              Cancel
+            </button>
+            <button
+              onClick={handleAddRequisition}
+              disabled={(!newReq.accountId || (newReq.accountId === '__new__' && !newReq.newAccountName.trim())) || !newReq.title.trim()}
+              className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary-dark shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span className="flex items-center gap-2"><Plus size={14} /> Add Requisition</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 bg-white p-1 rounded-lg shadow-sm mb-6 flex-wrap">
