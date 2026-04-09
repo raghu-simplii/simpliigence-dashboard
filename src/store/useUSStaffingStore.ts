@@ -6,6 +6,7 @@ import type {
   USStaffingRequisition,
   AccountCategory,
 } from '../types/usStaffing';
+import { db } from '../lib/supabaseSync';
 
 /* ââ Seed accounts ââ */
 const SEED_ACCOUNTS: USStaffingAccount[] = [
@@ -39,44 +40,58 @@ interface USStaffingState {
   addRequisition: (req: Omit<USStaffingRequisition, 'id' | 'created_at' | 'updated_at'>) => USStaffingRequisition;
   updateRequisition: (id: string, patch: Partial<USStaffingRequisition>) => void;
   removeRequisition: (id: string) => void;
+
+  /** Internal: called by realtime subscriptions to hydrate from Supabase */
+  _setFromSupabase: (accounts: USStaffingAccount[], requisitions: USStaffingRequisition[]) => void;
 }
 
 export const useUSStaffingStore = create<USStaffingState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       accounts: SEED_ACCOUNTS,
       requisitions: SEED_REQS,
 
       addAccount: (name, category) => {
         const acct: USStaffingAccount = { id: nanoid(), name, category, created_at: new Date().toISOString() };
         set((s) => ({ accounts: [...s.accounts, acct] }));
+        db.upsertUSAccount(acct);
         return acct;
       },
 
-      removeAccount: (id) =>
+      removeAccount: (id) => {
         set((s) => ({
           accounts: s.accounts.filter((a) => a.id !== id),
           requisitions: s.requisitions.filter((r) => r.account_id !== id),
-        })),
+        }));
+        db.deleteUSAccount(id);
+      },
 
       addRequisition: (req) => {
         const now = new Date().toISOString();
         const r: USStaffingRequisition = { ...req, id: nanoid(), created_at: now, updated_at: now };
         set((s) => ({ requisitions: [...s.requisitions, r] }));
+        db.upsertUSRequisition(r);
         return r;
       },
 
-      updateRequisition: (id, patch) =>
+      updateRequisition: (id, patch) => {
         set((s) => ({
           requisitions: s.requisitions.map((r) =>
             r.id === id ? { ...r, ...patch, updated_at: new Date().toISOString() } : r,
           ),
-        })),
+        }));
+        const updated = get().requisitions.find((r) => r.id === id);
+        if (updated) db.upsertUSRequisition(updated);
+      },
 
-      removeRequisition: (id) =>
+      removeRequisition: (id) => {
         set((s) => ({
           requisitions: s.requisitions.filter((r) => r.id !== id),
-        })),
+        }));
+        db.deleteUSRequisition(id);
+      },
+
+      _setFromSupabase: (accounts, requisitions) => set({ accounts, requisitions }),
     }),
     { name: 'simpliigence-us-staffing' },
   ),

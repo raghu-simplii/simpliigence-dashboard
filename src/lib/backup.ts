@@ -18,6 +18,11 @@ const TABLES = [
   'hiring_forecast_config',
   'staffing_requests',
   'pipeline_projects',
+  'india_staffing_accounts',
+  'india_staffing_requisitions',
+  'india_staffing_statuses',
+  'us_staffing_accounts',
+  'us_staffing_requisitions',
 ] as const;
 
 export interface BackupPayload {

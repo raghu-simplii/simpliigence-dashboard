@@ -13,6 +13,8 @@ import type { ForecastAssignment, Month, ZohoPipelineProject } from '../types/fo
 import type { FinancialSettings } from '../types/financial';
 import type { ConciergeConfig, ScenarioSettings, StaffingRequest } from '../types/hiringForecast';
 import { emptyMonthRecord } from '../types/forecast';
+import type { StaffingAccount as IndiaAccount, StaffingRequisition as IndiaRequisition, DailyStatus } from '../types/staffing';
+import type { USStaffingAccount, USStaffingRequisition, AccountCategory } from '../types/usStaffing';
 
 // ─── Conversion helpers ────────────────────────────────────────────
 
@@ -120,6 +122,82 @@ function staffingRequestToRow(r: StaffingRequest) {
   };
 }
 
+// ─── India Staffing converters ──────────────────────────────────────
+
+function indiaAccountToRow(a: IndiaAccount) {
+  return { id: a.id, name: a.name, created_at: a.created_at, updated_by: CLIENT_ID, updated_at: new Date().toISOString() };
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToIndiaAccount(row: any): IndiaAccount {
+  return { id: row.id, name: row.name, created_at: row.created_at };
+}
+
+function indiaReqToRow(r: IndiaRequisition) {
+  return {
+    id: r.id, account_id: r.account_id, title: r.title, month: r.month,
+    new_positions: r.new_positions, expected_closure: r.expected_closure,
+    close_by_date: r.close_by_date, status_field: r.status_field,
+    stage: r.stage, anticipation: r.anticipation,
+    client_spoc: r.client_spoc, department: r.department, location: r.location,
+    created_at: r.created_at, updated_at: r.updated_at, updated_by: CLIENT_ID,
+  };
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToIndiaReq(row: any): IndiaRequisition {
+  return {
+    id: row.id, account_id: row.account_id, title: row.title, month: row.month,
+    new_positions: row.new_positions ?? 0, expected_closure: row.expected_closure ?? '',
+    close_by_date: row.close_by_date ?? '', status_field: row.status_field ?? 'Open',
+    stage: row.stage ?? 'Sourcing', anticipation: row.anticipation ?? '',
+    client_spoc: row.client_spoc ?? '', department: row.department ?? '', location: row.location ?? '',
+    created_at: row.created_at, updated_at: row.updated_at,
+  };
+}
+
+function dailyStatusToRow(s: DailyStatus) {
+  return {
+    id: s.id, requisition_id: s.requisition_id, status_date: s.status_date,
+    status_text: s.status_text, anticipation: s.anticipation,
+    created_at: s.created_at, updated_by: CLIENT_ID,
+  };
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToDailyStatus(row: any): DailyStatus {
+  return {
+    id: row.id, requisition_id: row.requisition_id, status_date: row.status_date,
+    status_text: row.status_text, anticipation: row.anticipation ?? '',
+    created_at: row.created_at,
+  };
+}
+
+// ─── US Staffing converters ────────────────────────────────────────
+
+function usAccountToRow(a: USStaffingAccount) {
+  return { id: a.id, name: a.name, category: a.category, created_at: a.created_at, updated_by: CLIENT_ID, updated_at: new Date().toISOString() };
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToUSAccount(row: any): USStaffingAccount {
+  return { id: row.id, name: row.name, category: (row.category || 'SI') as AccountCategory, created_at: row.created_at };
+}
+
+function usReqToRow(r: USStaffingRequisition) {
+  return {
+    id: r.id, account_id: r.account_id, role: r.role,
+    initiation_date: r.initiation_date, stage: r.stage,
+    closure_date: r.closure_date, notes: r.notes,
+    created_at: r.created_at, updated_at: r.updated_at, updated_by: CLIENT_ID,
+  };
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToUSReq(row: any): USStaffingRequisition {
+  return {
+    id: row.id, account_id: row.account_id, role: row.role,
+    initiation_date: row.initiation_date ?? '', stage: row.stage ?? 'New',
+    closure_date: row.closure_date ?? '', notes: row.notes ?? '',
+    created_at: row.created_at, updated_at: row.updated_at,
+  };
+}
+
 // ─── Data fetchers (used on app init) ──────────────────────────────
 
 export async function fetchAssignments(): Promise<{ assignments: ForecastAssignment[]; weekDates: string[] } | null> {
@@ -179,6 +257,42 @@ export async function fetchPipelineProjects(): Promise<ZohoPipelineProject[] | n
   const { data, error } = await supabase.from('pipeline_projects').select('*');
   if (error) return null;
   return (data || []).map(pipelineRowToProject);
+}
+
+// ─── India Staffing fetchers ──────────────────────────────────────
+
+export async function fetchIndiaStaffing(): Promise<{ accounts: IndiaAccount[]; requisitions: IndiaRequisition[]; statuses: DailyStatus[] } | null> {
+  const [acctRes, reqRes, statusRes] = await Promise.all([
+    supabase.from('india_staffing_accounts').select('*'),
+    supabase.from('india_staffing_requisitions').select('*'),
+    supabase.from('india_staffing_statuses').select('*'),
+  ]);
+  if (acctRes.error || reqRes.error || statusRes.error) {
+    console.warn('[supabase] fetch india staffing failed:', acctRes.error?.message, reqRes.error?.message, statusRes.error?.message);
+    return null;
+  }
+  return {
+    accounts: (acctRes.data || []).map(rowToIndiaAccount),
+    requisitions: (reqRes.data || []).map(rowToIndiaReq),
+    statuses: (statusRes.data || []).map(rowToDailyStatus),
+  };
+}
+
+// ─── US Staffing fetchers ─────────────────────────────────────────
+
+export async function fetchUSStaffing(): Promise<{ accounts: USStaffingAccount[]; requisitions: USStaffingRequisition[] } | null> {
+  const [acctRes, reqRes] = await Promise.all([
+    supabase.from('us_staffing_accounts').select('*'),
+    supabase.from('us_staffing_requisitions').select('*'),
+  ]);
+  if (acctRes.error || reqRes.error) {
+    console.warn('[supabase] fetch us staffing failed:', acctRes.error?.message, reqRes.error?.message);
+    return null;
+  }
+  return {
+    accounts: (acctRes.data || []).map(rowToUSAccount),
+    requisitions: (reqRes.data || []).map(rowToUSReq),
+  };
 }
 
 // ─── Writers (called by store actions) ─────────────────────────────
@@ -328,6 +442,79 @@ export const db = {
     }
   },
 
+  // --- India Staffing ---
+  async upsertIndiaAccount(a: IndiaAccount) {
+    const { error } = await supabase.from('india_staffing_accounts').upsert(indiaAccountToRow(a), { onConflict: 'id' });
+    if (error) console.warn('[supabase] upsert india account failed:', error);
+  },
+  async deleteIndiaAccount(id: string) {
+    await Promise.all([
+      supabase.from('india_staffing_statuses').delete().in(
+        'requisition_id',
+        // subquery: get req ids for this account
+        (await supabase.from('india_staffing_requisitions').select('id').eq('account_id', id)).data?.map((r) => r.id) || [],
+      ),
+      supabase.from('india_staffing_requisitions').delete().eq('account_id', id),
+      supabase.from('india_staffing_accounts').delete().eq('id', id),
+    ]);
+  },
+  async upsertIndiaRequisition(r: IndiaRequisition) {
+    const { error } = await supabase.from('india_staffing_requisitions').upsert(indiaReqToRow(r), { onConflict: 'id' });
+    if (error) console.warn('[supabase] upsert india req failed:', error);
+  },
+  async deleteIndiaRequisition(id: string) {
+    await Promise.all([
+      supabase.from('india_staffing_requisitions').delete().eq('id', id),
+      supabase.from('india_staffing_statuses').delete().eq('requisition_id', id),
+    ]);
+  },
+  async upsertIndiaStatus(s: DailyStatus) {
+    const { error } = await supabase.from('india_staffing_statuses').upsert(dailyStatusToRow(s), { onConflict: 'id' });
+    if (error) console.warn('[supabase] upsert india status failed:', error);
+  },
+  async deleteIndiaStatus(id: string) {
+    const { error } = await supabase.from('india_staffing_statuses').delete().eq('id', id);
+    if (error) console.warn('[supabase] delete india status failed:', error);
+  },
+  async replaceAllIndiaStaffing(accounts: IndiaAccount[], requisitions: IndiaRequisition[], statuses: DailyStatus[]) {
+    await Promise.all([
+      supabase.from('india_staffing_statuses').delete().neq('id', ''),
+      supabase.from('india_staffing_requisitions').delete().neq('id', ''),
+      supabase.from('india_staffing_accounts').delete().neq('id', ''),
+    ]);
+    if (accounts.length) await supabase.from('india_staffing_accounts').insert(accounts.map(indiaAccountToRow));
+    if (requisitions.length) await supabase.from('india_staffing_requisitions').insert(requisitions.map(indiaReqToRow));
+    if (statuses.length) await supabase.from('india_staffing_statuses').insert(statuses.map(dailyStatusToRow));
+  },
+
+  // --- US Staffing ---
+  async upsertUSAccount(a: USStaffingAccount) {
+    const { error } = await supabase.from('us_staffing_accounts').upsert(usAccountToRow(a), { onConflict: 'id' });
+    if (error) console.warn('[supabase] upsert us account failed:', error);
+  },
+  async deleteUSAccount(id: string) {
+    await Promise.all([
+      supabase.from('us_staffing_accounts').delete().eq('id', id),
+      supabase.from('us_staffing_requisitions').delete().eq('account_id', id),
+    ]);
+  },
+  async upsertUSRequisition(r: USStaffingRequisition) {
+    const { error } = await supabase.from('us_staffing_requisitions').upsert(usReqToRow(r), { onConflict: 'id' });
+    if (error) console.warn('[supabase] upsert us req failed:', error);
+  },
+  async deleteUSRequisition(id: string) {
+    const { error } = await supabase.from('us_staffing_requisitions').delete().eq('id', id);
+    if (error) console.warn('[supabase] delete us req failed:', error);
+  },
+  async replaceAllUSStaffing(accounts: USStaffingAccount[], requisitions: USStaffingRequisition[]) {
+    await Promise.all([
+      supabase.from('us_staffing_requisitions').delete().neq('id', ''),
+      supabase.from('us_staffing_accounts').delete().neq('id', ''),
+    ]);
+    if (accounts.length) await supabase.from('us_staffing_accounts').insert(accounts.map(usAccountToRow));
+    if (requisitions.length) await supabase.from('us_staffing_requisitions').insert(requisitions.map(usReqToRow));
+  },
+
   /** Clear all tables (for Settings → Clear All Data). */
   async clearAll() {
     await Promise.all([
@@ -347,6 +534,11 @@ export const db = {
       }),
       supabase.from('staffing_requests').delete().neq('id', ''),
       supabase.from('pipeline_projects').delete().neq('id', ''),
+      supabase.from('india_staffing_statuses').delete().neq('id', ''),
+      supabase.from('india_staffing_requisitions').delete().neq('id', ''),
+      supabase.from('india_staffing_accounts').delete().neq('id', ''),
+      supabase.from('us_staffing_requisitions').delete().neq('id', ''),
+      supabase.from('us_staffing_accounts').delete().neq('id', ''),
     ]);
   },
 };
@@ -359,6 +551,8 @@ type StoreSetters = {
   setSyncConfig: (c: Record<string, unknown>) => void;
   setHiringConfig: (concierge: ConciergeConfig, scenario: ScenarioSettings, requests: StaffingRequest[]) => void;
   setPipelineProjects: (p: ZohoPipelineProject[]) => void;
+  setIndiaStaffing: (accounts: IndiaAccount[], requisitions: IndiaRequisition[], statuses: DailyStatus[]) => void;
+  setUSStaffing: (accounts: USStaffingAccount[], requisitions: USStaffingRequisition[]) => void;
   getForecastAssignments: () => ForecastAssignment[];
   getStaffingRequests: () => StaffingRequest[];
   getPipelineProjects: () => ZohoPipelineProject[];
@@ -506,6 +700,38 @@ export function setupRealtimeSubscriptions(setters: StoreSetters) {
       }
     },
   );
+
+  // --- India Staffing (refetch all on any change) ---
+  for (const table of ['india_staffing_accounts', 'india_staffing_requisitions', 'india_staffing_statuses'] as const) {
+    channel.on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table },
+      (payload) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const row = (payload.new || payload.old) as any;
+        if (row?.updated_by === CLIENT_ID) return;
+        fetchIndiaStaffing().then((data) => {
+          if (data) setters.setIndiaStaffing(data.accounts, data.requisitions, data.statuses);
+        });
+      },
+    );
+  }
+
+  // --- US Staffing (refetch all on any change) ---
+  for (const table of ['us_staffing_accounts', 'us_staffing_requisitions'] as const) {
+    channel.on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table },
+      (payload) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const row = (payload.new || payload.old) as any;
+        if (row?.updated_by === CLIENT_ID) return;
+        fetchUSStaffing().then((data) => {
+          if (data) setters.setUSStaffing(data.accounts, data.requisitions);
+        });
+      },
+    );
+  }
 
   channel.subscribe();
   return () => { supabase.removeChannel(channel); };

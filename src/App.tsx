@@ -3,7 +3,7 @@ import { RouterProvider } from 'react-router-dom';
 import { router } from './router';
 import { nanoid } from 'nanoid';
 import { buildSeedAssignments } from './data/employeeSeed';
-import { useForecastStore, useFinancialStore, useSyncStore, useHiringForecastStore, usePipelineStore } from './store';
+import { useForecastStore, useFinancialStore, useSyncStore, useHiringForecastStore, usePipelineStore, useStaffingStore, useUSStaffingStore } from './store';
 import { ZOHO_SEED_PROJECTS } from './data/zohoSeed';
 import {
   fetchAssignments,
@@ -12,6 +12,8 @@ import {
   fetchHiringForecastConfig,
   fetchStaffingRequests,
   fetchPipelineProjects,
+  fetchIndiaStaffing,
+  fetchUSStaffing,
   setupRealtimeSubscriptions,
   db,
 } from './lib/supabaseSync';
@@ -51,6 +53,8 @@ function useSupabaseInit() {
           hiringRes,
           staffingRes,
           pipelineRes,
+          indiaStaffingRes,
+          usStaffingRes,
         ] = await Promise.all([
           withTimeout(fetchAssignments()),
           withTimeout(fetchFinancialSettings()),
@@ -58,6 +62,8 @@ function useSupabaseInit() {
           withTimeout(fetchHiringForecastConfig()),
           withTimeout(fetchStaffingRequests()),
           withTimeout(fetchPipelineProjects()),
+          withTimeout(fetchIndiaStaffing()),
+          withTimeout(fetchUSStaffing()),
         ]);
 
         // --- Forecast assignments ---
@@ -146,6 +152,48 @@ function useSupabaseInit() {
           console.warn('[supabase] Pipeline fetch timed out — using localStorage');
         }
 
+        // --- India Staffing ---
+        if (!indiaStaffingRes.timedOut) {
+          const id = indiaStaffingRes.value;
+          if (id && id.accounts.length > 0) {
+            useStaffingStore.setState({
+              accounts: id.accounts,
+              requisitions: id.requisitions,
+              statuses: id.statuses,
+            });
+            console.log('[supabase] Loaded india staffing:', id.accounts.length, 'accounts,', id.requisitions.length, 'reqs');
+          } else {
+            // Supabase empty — push local/seed data
+            const local = useStaffingStore.getState();
+            if (local.accounts.length > 0) {
+              await db.replaceAllIndiaStaffing(local.accounts, local.requisitions, local.statuses);
+              console.log('[supabase] Seeded india staffing to Supabase');
+            }
+          }
+        } else {
+          console.warn('[supabase] India staffing fetch timed out — using localStorage');
+        }
+
+        // --- US Staffing ---
+        if (!usStaffingRes.timedOut) {
+          const ud = usStaffingRes.value;
+          if (ud && ud.accounts.length > 0) {
+            useUSStaffingStore.setState({
+              accounts: ud.accounts,
+              requisitions: ud.requisitions,
+            });
+            console.log('[supabase] Loaded US staffing:', ud.accounts.length, 'accounts,', ud.requisitions.length, 'reqs');
+          } else {
+            const local = useUSStaffingStore.getState();
+            if (local.accounts.length > 0) {
+              await db.replaceAllUSStaffing(local.accounts, local.requisitions);
+              console.log('[supabase] Seeded US staffing to Supabase');
+            }
+          }
+        } else {
+          console.warn('[supabase] US staffing fetch timed out — using localStorage');
+        }
+
         // Set up realtime subscriptions
         cleanup = setupRealtimeSubscriptions({
           setForecastState: (assignments, weekDates) => {
@@ -168,6 +216,12 @@ function useSupabaseInit() {
           },
           setPipelineProjects: (projects) => {
             usePipelineStore.setState({ projects });
+          },
+          setIndiaStaffing: (accounts, requisitions, statuses) => {
+            useStaffingStore.setState({ accounts, requisitions, statuses });
+          },
+          setUSStaffing: (accounts, requisitions) => {
+            useUSStaffingStore.setState({ accounts, requisitions });
           },
           getForecastAssignments: () => useForecastStore.getState().assignments,
           getStaffingRequests: () => useHiringForecastStore.getState().staffingRequests,

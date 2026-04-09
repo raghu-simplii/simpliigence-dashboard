@@ -8,6 +8,7 @@ import type {
   StaffingStatus,
   PipelineStage,
 } from '../types/staffing';
+import { db } from '../lib/supabaseSync';
 
 /* ââ Seed data from original Staffing.xlsx ââ */
 const SEED_ACCOUNTS: StaffingAccount[] = [
@@ -97,6 +98,9 @@ interface StaffingState {
     new_positions: number; expected_closure: string;
     status_text: string; anticipation: string;
   }>) => { imported: number; errors: string[] };
+
+  /** Internal: called by realtime subscriptions to hydrate from Supabase */
+  _setFromSupabase: (accounts: StaffingAccount[], requisitions: StaffingRequisition[], statuses: DailyStatus[]) => void;
 }
 
 export const useStaffingStore = create<StaffingState>()(
@@ -109,45 +113,58 @@ export const useStaffingStore = create<StaffingState>()(
       addAccount: (name) => {
         const acct: StaffingAccount = { id: nanoid(), name, created_at: new Date().toISOString() };
         set((s) => ({ accounts: [...s.accounts, acct] }));
+        db.upsertIndiaAccount(acct);
         return acct;
       },
 
-      removeAccount: (id) =>
+      removeAccount: (id) => {
         set((s) => ({
           accounts: s.accounts.filter((a) => a.id !== id),
           requisitions: s.requisitions.filter((r) => r.account_id !== id),
           statuses: s.statuses.filter(
             (st) => !s.requisitions.filter((r) => r.account_id === id).some((r) => r.id === st.requisition_id),
           ),
-        })),
+        }));
+        db.deleteIndiaAccount(id);
+      },
 
       addRequisition: (req) => {
         const now = new Date().toISOString();
         const r: StaffingRequisition = { ...req, id: nanoid(), created_at: now, updated_at: now };
         set((s) => ({ requisitions: [...s.requisitions, r] }));
+        db.upsertIndiaRequisition(r);
         return r;
       },
 
-      updateRequisition: (id, patch) =>
+      updateRequisition: (id, patch) => {
         set((s) => ({
           requisitions: s.requisitions.map((r) =>
             r.id === id ? { ...r, ...patch, updated_at: new Date().toISOString() } : r,
           ),
-        })),
+        }));
+        const updated = get().requisitions.find((r) => r.id === id);
+        if (updated) db.upsertIndiaRequisition(updated);
+      },
 
-      removeRequisition: (id) =>
+      removeRequisition: (id) => {
         set((s) => ({
           requisitions: s.requisitions.filter((r) => r.id !== id),
           statuses: s.statuses.filter((st) => st.requisition_id !== id),
-        })),
+        }));
+        db.deleteIndiaRequisition(id);
+      },
 
       addStatus: (input) => {
         const ds: DailyStatus = { ...input, id: nanoid(), created_at: new Date().toISOString() };
         set((s) => ({ statuses: [...s.statuses, ds] }));
+        db.upsertIndiaStatus(ds);
         return ds;
       },
 
-      removeStatus: (id) => set((s) => ({ statuses: s.statuses.filter((st) => st.id !== id) })),
+      removeStatus: (id) => {
+        set((s) => ({ statuses: s.statuses.filter((st) => st.id !== id) }));
+        db.deleteIndiaStatus(id);
+      },
 
       importRows: (rows) => {
         const state = get();
@@ -217,8 +234,11 @@ export const useStaffingStore = create<StaffingState>()(
         }
 
         set({ accounts: newAccounts, requisitions: newReqs, statuses: newStatuses });
+        db.replaceAllIndiaStaffing(newAccounts, newReqs, newStatuses);
         return { imported, errors };
       },
+
+      _setFromSupabase: (accounts, requisitions, statuses) => set({ accounts, requisitions, statuses }),
     }),
     {
       name: 'simpliigence-staffing',

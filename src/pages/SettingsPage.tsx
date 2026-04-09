@@ -52,6 +52,8 @@ export default function SettingsPage() {
     localStorage.removeItem('simpliigence-sync');
     localStorage.removeItem('simpliigence-hiring-forecast');
     localStorage.removeItem('simpliigence-pipeline');
+    localStorage.removeItem('simpliigence-staffing');
+    localStorage.removeItem('simpliigence-us-staffing');
     window.location.reload();
   };
 
