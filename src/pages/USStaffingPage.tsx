@@ -221,11 +221,10 @@ export default function USStaffingPage() {
         </h3>
         {acctList.map(acct => {
           const acctReqs = filteredReqs.filter(r => r.account_id === acct.id);
-          if (acctReqs.length === 0) return null;
           const isExpanded = expandedAccounts.has(acct.id);
 
           return (
-            <Card key={acct.id} className="mb-3">
+            <Card key={acct.id} className="mb-3 group">
               <div className="flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-slate-50 rounded-t-xl" onClick={() => toggleAccount(acct.id)}>
                 <div className="flex items-center gap-2">
                   {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
@@ -233,6 +232,19 @@ export default function USStaffingPage() {
                   <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{acct.category}</span>
                   <span className="text-xs text-slate-400">{acctReqs.length} roles</span>
                 </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (confirm(`Delete account "${acct.name}" and all its ${acctReqs.length} requisitions?`)) {
+                      acctReqs.forEach(r => removeRequisition(r.id));
+                      removeAccount(acct.id);
+                    }
+                  }}
+                  className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                  title="Delete account"
+                >
+                  <Trash2 size={14} />
+                </button>
               </div>
               {isExpanded && (
                 <div className="overflow-x-auto">
@@ -334,13 +346,31 @@ export default function USStaffingPage() {
             </h3>
             {mspAccounts.map(a => {
               const count = requisitions.filter(r => r.account_id === a.id).length;
+              if (count === 0) return null;
               return (
-                <div key={a.id} className="flex items-center justify-between py-1.5 border-b border-slate-50 last:border-0">
+                <div key={a.id} className="flex items-center justify-between py-1.5 border-b border-slate-50 last:border-0 group/row">
                   <span className="text-xs text-slate-700">{a.name}</span>
-                  <span className="text-xs font-semibold text-slate-500">{count} roles</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-slate-500">{count} roles</span>
+                    <button
+                      onClick={() => {
+                        if (confirm(`Delete "${a.name}" and all its ${count} requisitions?`)) {
+                          requisitions.filter(r => r.account_id === a.id).forEach(r => removeRequisition(r.id));
+                          removeAccount(a.id);
+                        }
+                      }}
+                      className="p-0.5 text-red-400 hover:text-red-600 opacity-0 group-hover/row:opacity-100 transition-opacity"
+                      title="Delete account"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
                 </div>
               );
             })}
+            {mspAccounts.every(a => requisitions.filter(r => r.account_id === a.id).length === 0) && (
+              <p className="text-xs text-slate-400 italic">No active MSP accounts</p>
+            )}
           </div>
         </Card>
         <Card>
@@ -350,13 +380,31 @@ export default function USStaffingPage() {
             </h3>
             {siAccounts.map(a => {
               const count = requisitions.filter(r => r.account_id === a.id).length;
+              if (count === 0) return null;
               return (
-                <div key={a.id} className="flex items-center justify-between py-1.5 border-b border-slate-50 last:border-0">
+                <div key={a.id} className="flex items-center justify-between py-1.5 border-b border-slate-50 last:border-0 group/row">
                   <span className="text-xs text-slate-700">{a.name}</span>
-                  <span className="text-xs font-semibold text-slate-500">{count} roles</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-slate-500">{count} roles</span>
+                    <button
+                      onClick={() => {
+                        if (confirm(`Delete "${a.name}" and all its ${count} requisitions?`)) {
+                          requisitions.filter(r => r.account_id === a.id).forEach(r => removeRequisition(r.id));
+                          removeAccount(a.id);
+                        }
+                      }}
+                      className="p-0.5 text-red-400 hover:text-red-600 opacity-0 group-hover/row:opacity-100 transition-opacity"
+                      title="Delete account"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
                 </div>
               );
             })}
+            {siAccounts.every(a => requisitions.filter(r => r.account_id === a.id).length === 0) && (
+              <p className="text-xs text-slate-400 italic">No active SI accounts</p>
+            )}
           </div>
         </Card>
       </div>
