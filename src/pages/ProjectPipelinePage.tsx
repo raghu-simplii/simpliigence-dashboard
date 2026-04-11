@@ -4,7 +4,8 @@ import { PageHeader } from '../components/shared/PageHeader';
 import { Card, Badge } from '../components/ui';
 import { deriveProjectSummaries } from '../lib/parseSpreadsheet';
 import type { ZohoPipelineProject, ZohoPhase } from '../types/forecast';
-import { ChevronDown, ChevronRight, RefreshCw, Users, Calendar, Clock, Rocket, DollarSign, TrendingUp } from 'lucide-react';
+import { ChevronDown, ChevronRight, RefreshCw, Users, Calendar, Clock, Rocket, DollarSign, TrendingUp, Loader2 } from 'lucide-react';
+import { ZOHO_SEED_PROJECTS } from '../data/zohoSeed';
 
 /* ── Status badge helper ──────────────────────────────── */
 function projectStatusVariant(status: string) {
@@ -393,8 +394,10 @@ export default function ProjectPipelinePage() {
   const assignments = useForecastStore((s) => s.assignments);
   const allProjects = usePipelineStore((s) => s.projects);
   const updateProject = usePipelineStore((s) => s.updateProject);
+  const setZohoProjects = usePipelineStore((s) => s.setZohoProjects);
   const lastSync = usePipelineStore((s) => s.lastZohoSync);
   const cadToUsdRate = useFinancialStore((s) => s.settings.cadToUsdRate) || 0.73;
+  const [syncing, setSyncing] = useState(false);
 
   // Current projects = Zoho-sourced only
   const currentProjects = useMemo(() => allProjects.filter((p) => p.source === 'zoho'), [allProjects]);
@@ -417,12 +420,27 @@ export default function ProjectPipelinePage() {
         title="Current Projects"
         subtitle={`${currentProjects.length} projects from Zoho`}
         action={
-          lastSync && (
-            <div className="flex items-center gap-2 text-xs text-slate-400">
-              <RefreshCw size={12} />
-              Last synced {new Date(lastSync).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-            </div>
-          )
+          <div className="flex items-center gap-3">
+            {lastSync && (
+              <span className="text-xs text-slate-400">
+                Last synced {new Date(lastSync).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+            <button
+              onClick={() => {
+                setSyncing(true);
+                setTimeout(() => {
+                  setZohoProjects(ZOHO_SEED_PROJECTS);
+                  setSyncing(false);
+                }, 500);
+              }}
+              disabled={syncing}
+              className="flex items-center gap-1.5 text-xs font-semibold bg-primary text-white px-3 py-1.5 rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-all"
+            >
+              {syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              {syncing ? 'Syncing...' : 'Sync from Zoho'}
+            </button>
+          </div>
         }
       />
 
