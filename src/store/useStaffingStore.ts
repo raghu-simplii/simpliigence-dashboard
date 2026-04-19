@@ -18,16 +18,16 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 /* ── Seed data from original Staffing.xlsx ── */
 const SEED_ACCOUNTS: StaffingAccount[] = [
-  { id: 'acct-1', name: 'Acuity', created_at: '2025-03-01' },
-  { id: 'acct-2', name: 'Amex', created_at: '2025-03-01' },
-  { id: 'acct-3', name: 'Ciklum', created_at: '2025-03-01' },
-  { id: 'acct-4', name: 'Ness', created_at: '2025-03-01' },
-  { id: 'acct-5', name: 'Persistent', created_at: '2025-03-01' },
-  { id: 'acct-6', name: 'Merck', created_at: '2025-03-01' },
+  { id: 'acct-1', name: 'Acuity', created_at: '2026-03-01' },
+  { id: 'acct-2', name: 'Amex', created_at: '2026-03-01' },
+  { id: 'acct-3', name: 'Ciklum', created_at: '2026-03-01' },
+  { id: 'acct-4', name: 'Ness', created_at: '2026-03-01' },
+  { id: 'acct-5', name: 'Persistent', created_at: '2026-03-01' },
+  { id: 'acct-6', name: 'Merck', created_at: '2026-03-01' },
 ];
 
 const seedReq = (p: Partial<StaffingRequisition> & { id: string; account_id: string; title: string; month: string; new_positions: number; expected_closure: string; anticipation: string; created_at: string; updated_at: string; }): StaffingRequisition => ({
-  start_date: p.created_at || '2025-03-01',
+  start_date: p.created_at || '2026-03-01',
   close_by_date: '',
   status_field: 'In Progress' as StaffingStatus,
   stage: 'Sourcing' as PipelineStage,
@@ -39,57 +39,57 @@ const seedReq = (p: Partial<StaffingRequisition> & { id: string; account_id: str
 } as StaffingRequisition);
 
 const SEED_REQS: StaffingRequisition[] = [
-  seedReq({id:'r1',account_id:'acct-1',title:'Mixed (FSL Architect, Python+AI, .Net FullStack)',month:'March',new_positions:6,expected_closure:'March End',anticipation:'Expecting closures in early next week',created_at:'2025-03-01',updated_at:'2025-03-27'}),
-  seedReq({id:'r2',account_id:'acct-2',title:'Product Owner',month:'March',new_positions:2,expected_closure:'March End',anticipation:'Expecting onboarding Mon/Early next week',created_at:'2025-03-01',updated_at:'2025-03-27'}),
-  seedReq({id:'r3',account_id:'acct-3',title:'AI Architect - Healthcare',month:'March',new_positions:2,expected_closure:'March End',anticipation:'No hopes. Expecting the L1 Selection',created_at:'2025-03-01',updated_at:'2025-03-26'}),
-  seedReq({id:'r4',account_id:'acct-3',title:'AI',month:'March',new_positions:1,expected_closure:'March End',anticipation:'Expecting client call - no hopes',created_at:'2025-03-01',updated_at:'2025-03-26'}),
-  seedReq({id:'r5',account_id:'acct-3',title:'DevOps',month:'March',new_positions:2,expected_closure:'March End',anticipation:'No hopes. Expecting at least one selection',created_at:'2025-03-01',updated_at:'2025-03-25'}),
-  seedReq({id:'r6',account_id:'acct-3',title:'Java',month:'March',new_positions:10,expected_closure:'March End',anticipation:'No hopes. Screening but no hopes on closures',created_at:'2025-03-01',updated_at:'2025-03-27'}),
-  seedReq({id:'r7',account_id:'acct-4',title:'Support',month:'March',new_positions:4,expected_closure:'March End',anticipation:'Expecting the slots',created_at:'2025-03-01',updated_at:'2025-03-27'}),
-  seedReq({id:'r8',account_id:'acct-4',title:'Developer',month:'March',new_positions:3,expected_closure:'March End',anticipation:'Expecting one more slot',created_at:'2025-03-01',updated_at:'2025-03-18'}),
-  seedReq({id:'r9',account_id:'acct-4',title:'Lead',month:'March',new_positions:1,expected_closure:'March End',anticipation:'Expecting slots 03/23 or 03/24',created_at:'2025-03-01',updated_at:'2025-03-26'}),
-  seedReq({id:'r10',account_id:'acct-5',title:'CPQ/Conga Architect',month:'March',new_positions:1,expected_closure:'Overdue',anticipation:'Expecting the onboarding date',created_at:'2025-03-01',updated_at:'2025-03-24'}),
-  seedReq({id:'r11',account_id:'acct-5',title:'CPQ/Conga Developer',month:'March',new_positions:1,expected_closure:'Overdue',anticipation:'Expecting the onboarding date',created_at:'2025-03-01',updated_at:'2025-03-24'}),
-  seedReq({id:'r12',account_id:'acct-5',title:'CPQ Architect + AI',month:'March',new_positions:1,expected_closure:'March End',anticipation:'No hopes. Expecting more slots',created_at:'2025-03-01',updated_at:'2025-03-26'}),
-  seedReq({id:'r13',account_id:'acct-5',title:'CPQ Developer + AI',month:'March',new_positions:2,expected_closure:'March End',anticipation:'Expecting select or more client discussion',created_at:'2025-03-01',updated_at:'2025-03-25'}),
-  seedReq({id:'r14',account_id:'acct-5',title:'LWC/Integration',month:'March',new_positions:1,expected_closure:'March End',anticipation:'Expecting the L1 slot',created_at:'2025-03-01',updated_at:'2025-03-26'}),
-  seedReq({id:'r15',account_id:'acct-5',title:'Dev Lead - Salescloud, CPQ',month:'March',new_positions:1,expected_closure:'March End',anticipation:'Expecting at least 1 to hit',created_at:'2025-03-01',updated_at:'2025-03-26'}),
-  seedReq({id:'r16',account_id:'acct-5',title:'Service Cloud Voice Tech Lead + Architect',month:'March',new_positions:2,expected_closure:'March End',anticipation:'R1 should clear',created_at:'2025-03-01',updated_at:'2025-03-27'}),
-  seedReq({id:'r17',account_id:'acct-5',title:'SF Architect (Sales, Conga CPQ, CLM)',month:'March',new_positions:1,expected_closure:'March End',anticipation:'No hopes. Expecting clarity on role',created_at:'2025-03-01',updated_at:'2025-03-27'}),
-  seedReq({id:'r18',account_id:'acct-5',title:'SF Automation QA (ACCELQ)',month:'March',new_positions:1,expected_closure:'March End',anticipation:'Expecting the slots',created_at:'2025-03-01',updated_at:'2025-03-24'}),
-  seedReq({id:'r19',account_id:'acct-5',title:'Salesforce Agentforce (7+ Yrs)',month:'March',new_positions:1,expected_closure:'March End',anticipation:'No hopes. Expecting L1 Selection',created_at:'2025-03-01',updated_at:'2025-03-25'}),
-  seedReq({id:'r20',account_id:'acct-5',title:'SF Vlocity',month:'March',new_positions:1,expected_closure:'March End',anticipation:'No hopes. Expecting L1 Selection',created_at:'2025-03-01',updated_at:'2025-03-18'}),
-  seedReq({id:'r21',account_id:'acct-6',title:'SF Developer',month:'March',new_positions:1,expected_closure:'March End',anticipation:'Expecting client discussion',created_at:'2025-03-01',updated_at:'2025-03-27'}),
-  seedReq({id:'r22',account_id:'acct-6',title:'SF Service Cloud CTI',month:'March',new_positions:1,expected_closure:'March End',anticipation:'Expecting client discussion',created_at:'2025-03-01',updated_at:'2025-03-23'}),
+  seedReq({id:'r1',account_id:'acct-1',title:'Mixed (FSL Architect, Python+AI, .Net FullStack)',month:'March',new_positions:6,expected_closure:'March End',anticipation:'Expecting closures in early next week',created_at:'2026-03-01',updated_at:'2026-03-27'}),
+  seedReq({id:'r2',account_id:'acct-2',title:'Product Owner',month:'March',new_positions:2,expected_closure:'March End',anticipation:'Expecting onboarding Mon/Early next week',created_at:'2026-03-01',updated_at:'2026-03-27'}),
+  seedReq({id:'r3',account_id:'acct-3',title:'AI Architect - Healthcare',month:'March',new_positions:2,expected_closure:'March End',anticipation:'No hopes. Expecting the L1 Selection',created_at:'2026-03-01',updated_at:'2026-03-26'}),
+  seedReq({id:'r4',account_id:'acct-3',title:'AI',month:'March',new_positions:1,expected_closure:'March End',anticipation:'Expecting client call - no hopes',created_at:'2026-03-01',updated_at:'2026-03-26'}),
+  seedReq({id:'r5',account_id:'acct-3',title:'DevOps',month:'March',new_positions:2,expected_closure:'March End',anticipation:'No hopes. Expecting at least one selection',created_at:'2026-03-01',updated_at:'2026-03-25'}),
+  seedReq({id:'r6',account_id:'acct-3',title:'Java',month:'March',new_positions:10,expected_closure:'March End',anticipation:'No hopes. Screening but no hopes on closures',created_at:'2026-03-01',updated_at:'2026-03-27'}),
+  seedReq({id:'r7',account_id:'acct-4',title:'Support',month:'March',new_positions:4,expected_closure:'March End',anticipation:'Expecting the slots',created_at:'2026-03-01',updated_at:'2026-03-27'}),
+  seedReq({id:'r8',account_id:'acct-4',title:'Developer',month:'March',new_positions:3,expected_closure:'March End',anticipation:'Expecting one more slot',created_at:'2026-03-01',updated_at:'2026-03-18'}),
+  seedReq({id:'r9',account_id:'acct-4',title:'Lead',month:'March',new_positions:1,expected_closure:'March End',anticipation:'Expecting slots 03/23 or 03/24',created_at:'2026-03-01',updated_at:'2026-03-26'}),
+  seedReq({id:'r10',account_id:'acct-5',title:'CPQ/Conga Architect',month:'March',new_positions:1,expected_closure:'Overdue',anticipation:'Expecting the onboarding date',created_at:'2026-03-01',updated_at:'2026-03-24'}),
+  seedReq({id:'r11',account_id:'acct-5',title:'CPQ/Conga Developer',month:'March',new_positions:1,expected_closure:'Overdue',anticipation:'Expecting the onboarding date',created_at:'2026-03-01',updated_at:'2026-03-24'}),
+  seedReq({id:'r12',account_id:'acct-5',title:'CPQ Architect + AI',month:'March',new_positions:1,expected_closure:'March End',anticipation:'No hopes. Expecting more slots',created_at:'2026-03-01',updated_at:'2026-03-26'}),
+  seedReq({id:'r13',account_id:'acct-5',title:'CPQ Developer + AI',month:'March',new_positions:2,expected_closure:'March End',anticipation:'Expecting select or more client discussion',created_at:'2026-03-01',updated_at:'2026-03-25'}),
+  seedReq({id:'r14',account_id:'acct-5',title:'LWC/Integration',month:'March',new_positions:1,expected_closure:'March End',anticipation:'Expecting the L1 slot',created_at:'2026-03-01',updated_at:'2026-03-26'}),
+  seedReq({id:'r15',account_id:'acct-5',title:'Dev Lead - Salescloud, CPQ',month:'March',new_positions:1,expected_closure:'March End',anticipation:'Expecting at least 1 to hit',created_at:'2026-03-01',updated_at:'2026-03-26'}),
+  seedReq({id:'r16',account_id:'acct-5',title:'Service Cloud Voice Tech Lead + Architect',month:'March',new_positions:2,expected_closure:'March End',anticipation:'R1 should clear',created_at:'2026-03-01',updated_at:'2026-03-27'}),
+  seedReq({id:'r17',account_id:'acct-5',title:'SF Architect (Sales, Conga CPQ, CLM)',month:'March',new_positions:1,expected_closure:'March End',anticipation:'No hopes. Expecting clarity on role',created_at:'2026-03-01',updated_at:'2026-03-27'}),
+  seedReq({id:'r18',account_id:'acct-5',title:'SF Automation QA (ACCELQ)',month:'March',new_positions:1,expected_closure:'March End',anticipation:'Expecting the slots',created_at:'2026-03-01',updated_at:'2026-03-24'}),
+  seedReq({id:'r19',account_id:'acct-5',title:'Salesforce Agentforce (7+ Yrs)',month:'March',new_positions:1,expected_closure:'March End',anticipation:'No hopes. Expecting L1 Selection',created_at:'2026-03-01',updated_at:'2026-03-25'}),
+  seedReq({id:'r20',account_id:'acct-5',title:'SF Vlocity',month:'March',new_positions:1,expected_closure:'March End',anticipation:'No hopes. Expecting L1 Selection',created_at:'2026-03-01',updated_at:'2026-03-18'}),
+  seedReq({id:'r21',account_id:'acct-6',title:'SF Developer',month:'March',new_positions:1,expected_closure:'March End',anticipation:'Expecting client discussion',created_at:'2026-03-01',updated_at:'2026-03-27'}),
+  seedReq({id:'r22',account_id:'acct-6',title:'SF Service Cloud CTI',month:'March',new_positions:1,expected_closure:'March End',anticipation:'Expecting client discussion',created_at:'2026-03-01',updated_at:'2026-03-23'}),
   // April — only genuinely NEW positions (not carried over from March)
-  seedReq({id:'r23',account_id:'acct-1',title:'SF Architect / Python+AI / Solution Architect',month:'April',new_positions:3,expected_closure:'7th April',anticipation:'Python+AI shall close one of 3 proposed',created_at:'2025-04-01',updated_at:'2025-04-02'}),
+  seedReq({id:'r23',account_id:'acct-1',title:'SF Architect / Python+AI / Solution Architect',month:'April',new_positions:3,expected_closure:'7th April',anticipation:'Python+AI shall close one of 3 proposed',created_at:'2026-04-01',updated_at:'2026-04-02'}),
 ];
 
 const SEED_STATUSES: DailyStatus[] = [
-  {id:'s1',requisition_id:'r1',status_date:'2025-03-27',status_text:'Got an FSL Architect position; Python+AI 2 interviews scheduled',anticipation:'Expecting closures early next week',created_at:'2025-03-27'},
-  {id:'s2',requisition_id:'r1',status_date:'2025-03-26',status_text:'Closed 2 .Net Full Stack positions & working on Python+AI',anticipation:'Targeting to close today/tomorrow',created_at:'2025-03-26'},
-  {id:'s3',requisition_id:'r1',status_date:'2025-03-25',status_text:'Full Stack interviews scheduled & working on Python+AI',anticipation:'',created_at:'2025-03-25'},
-  {id:'s4',requisition_id:'r1',status_date:'2025-03-18',status_text:'1 .Net FullStack Select',anticipation:'',created_at:'2025-03-18'},
-  {id:'s5',requisition_id:'r1',status_date:'2025-03-17',status_text:'1 .Net closed, 2 .Net FullStack in Client Evaluation, 1 Python in Screening',anticipation:'',created_at:'2025-03-17'},
-  {id:'s6',requisition_id:'r2',status_date:'2025-03-27',status_text:'Closed 2 positions & working on onboarding process',anticipation:'Onboarding Mon/Early next week',created_at:'2025-03-27'},
-  {id:'s7',requisition_id:'r2',status_date:'2025-03-24',status_text:'1 Select (Rashmi for senior PO), other scheduled. Got verbal communication',anticipation:'',created_at:'2025-03-24'},
-  {id:'s8',requisition_id:'r2',status_date:'2025-03-23',status_text:'Got slots for 2 candidates - 03/24 & 03/26',anticipation:'',created_at:'2025-03-23'},
-  {id:'s9',requisition_id:'r2',status_date:'2025-03-17',status_text:'Shared profiles',anticipation:'',created_at:'2025-03-17'},
-  {id:'s10',requisition_id:'r6',status_date:'2025-03-27',status_text:'1 In Client round & 2 Need client slots',anticipation:'No hopes on closures',created_at:'2025-03-27'},
-  {id:'s11',requisition_id:'r6',status_date:'2025-03-26',status_text:'6 Evaluations done - 3 select for next round',anticipation:'',created_at:'2025-03-26'},
-  {id:'s12',requisition_id:'r6',status_date:'2025-03-24',status_text:'Got slots for 12 folks',anticipation:'',created_at:'2025-03-24'},
-  {id:'s13',requisition_id:'r6',status_date:'2025-03-17',status_text:'Planning to share 09 profiles',anticipation:'',created_at:'2025-03-17'},
-  {id:'s14',requisition_id:'r7',status_date:'2025-03-27',status_text:'1 Select out of 3 & Need more profiles',anticipation:'',created_at:'2025-03-27'},
-  {id:'s15',requisition_id:'r7',status_date:'2025-03-26',status_text:'2 Interviews done, 1 select for next round',anticipation:'',created_at:'2025-03-26'},
-  {id:'s16',requisition_id:'r23',status_date:'2025-04-02',status_text:'SF Architect: Shared 4 profiles. Python+AI: Awaiting feedback. 2 Backfill interviews in place',anticipation:'Python+AI shall close one of 3',created_at:'2025-04-02'},
-  {id:'s17',requisition_id:'r2',status_date:'2025-04-02',status_text:'Identified Resources & Working on onboarding Process',anticipation:'In Onboarding discussion',created_at:'2025-04-02'},
-  {id:'s18',requisition_id:'r2',status_date:'2025-04-01',status_text:'In Onboarding discussion',anticipation:'',created_at:'2025-04-01'},
-  {id:'s19',requisition_id:'r6',status_date:'2025-04-02',status_text:'Ciklum TA working on high priority tasks. Need time to move forward',anticipation:'No hopes',created_at:'2025-04-02'},
-  {id:'s20',requisition_id:'r6',status_date:'2025-04-01',status_text:'No News from Client',anticipation:'',created_at:'2025-04-01'},
-  {id:'s21',requisition_id:'r7',status_date:'2025-04-02',status_text:'Shared 5 profiles on 04/01, 1 Candidate Reject',anticipation:'',created_at:'2025-04-02'},
-  {id:'s22',requisition_id:'r8',status_date:'2025-04-02',status_text:'1 R2 clear & put across client round',anticipation:'Targeting to close in April',created_at:'2025-04-02'},
-  {id:'s23',requisition_id:'r19',status_date:'2025-04-02',status_text:'Client Select & Awaiting Final feedback',anticipation:'Expecting L1 Selection',created_at:'2025-04-02'},
-  {id:'s24',requisition_id:'r22',status_date:'2025-04-01',status_text:'Select - got the confirmation',anticipation:'Onboarding 3-4 weeks',created_at:'2025-04-01'},
+  {id:'s1',requisition_id:'r1',status_date:'2026-03-27',status_text:'Got an FSL Architect position; Python+AI 2 interviews scheduled',anticipation:'Expecting closures early next week',created_at:'2026-03-27'},
+  {id:'s2',requisition_id:'r1',status_date:'2026-03-26',status_text:'Closed 2 .Net Full Stack positions & working on Python+AI',anticipation:'Targeting to close today/tomorrow',created_at:'2026-03-26'},
+  {id:'s3',requisition_id:'r1',status_date:'2026-03-25',status_text:'Full Stack interviews scheduled & working on Python+AI',anticipation:'',created_at:'2026-03-25'},
+  {id:'s4',requisition_id:'r1',status_date:'2026-03-18',status_text:'1 .Net FullStack Select',anticipation:'',created_at:'2026-03-18'},
+  {id:'s5',requisition_id:'r1',status_date:'2026-03-17',status_text:'1 .Net closed, 2 .Net FullStack in Client Evaluation, 1 Python in Screening',anticipation:'',created_at:'2026-03-17'},
+  {id:'s6',requisition_id:'r2',status_date:'2026-03-27',status_text:'Closed 2 positions & working on onboarding process',anticipation:'Onboarding Mon/Early next week',created_at:'2026-03-27'},
+  {id:'s7',requisition_id:'r2',status_date:'2026-03-24',status_text:'1 Select (Rashmi for senior PO), other scheduled. Got verbal communication',anticipation:'',created_at:'2026-03-24'},
+  {id:'s8',requisition_id:'r2',status_date:'2026-03-23',status_text:'Got slots for 2 candidates - 03/24 & 03/26',anticipation:'',created_at:'2026-03-23'},
+  {id:'s9',requisition_id:'r2',status_date:'2026-03-17',status_text:'Shared profiles',anticipation:'',created_at:'2026-03-17'},
+  {id:'s10',requisition_id:'r6',status_date:'2026-03-27',status_text:'1 In Client round & 2 Need client slots',anticipation:'No hopes on closures',created_at:'2026-03-27'},
+  {id:'s11',requisition_id:'r6',status_date:'2026-03-26',status_text:'6 Evaluations done - 3 select for next round',anticipation:'',created_at:'2026-03-26'},
+  {id:'s12',requisition_id:'r6',status_date:'2026-03-24',status_text:'Got slots for 12 folks',anticipation:'',created_at:'2026-03-24'},
+  {id:'s13',requisition_id:'r6',status_date:'2026-03-17',status_text:'Planning to share 09 profiles',anticipation:'',created_at:'2026-03-17'},
+  {id:'s14',requisition_id:'r7',status_date:'2026-03-27',status_text:'1 Select out of 3 & Need more profiles',anticipation:'',created_at:'2026-03-27'},
+  {id:'s15',requisition_id:'r7',status_date:'2026-03-26',status_text:'2 Interviews done, 1 select for next round',anticipation:'',created_at:'2026-03-26'},
+  {id:'s16',requisition_id:'r23',status_date:'2026-04-02',status_text:'SF Architect: Shared 4 profiles. Python+AI: Awaiting feedback. 2 Backfill interviews in place',anticipation:'Python+AI shall close one of 3',created_at:'2026-04-02'},
+  {id:'s17',requisition_id:'r2',status_date:'2026-04-02',status_text:'Identified Resources & Working on onboarding Process',anticipation:'In Onboarding discussion',created_at:'2026-04-02'},
+  {id:'s18',requisition_id:'r2',status_date:'2026-04-01',status_text:'In Onboarding discussion',anticipation:'',created_at:'2026-04-01'},
+  {id:'s19',requisition_id:'r6',status_date:'2026-04-02',status_text:'Ciklum TA working on high priority tasks. Need time to move forward',anticipation:'No hopes',created_at:'2026-04-02'},
+  {id:'s20',requisition_id:'r6',status_date:'2026-04-01',status_text:'No News from Client',anticipation:'',created_at:'2026-04-01'},
+  {id:'s21',requisition_id:'r7',status_date:'2026-04-02',status_text:'Shared 5 profiles on 04/01, 1 Candidate Reject',anticipation:'',created_at:'2026-04-02'},
+  {id:'s22',requisition_id:'r8',status_date:'2026-04-02',status_text:'1 R2 clear & put across client round',anticipation:'Targeting to close in April',created_at:'2026-04-02'},
+  {id:'s23',requisition_id:'r19',status_date:'2026-04-02',status_text:'Client Select & Awaiting Final feedback',anticipation:'Expecting L1 Selection',created_at:'2026-04-02'},
+  {id:'s24',requisition_id:'r22',status_date:'2026-04-01',status_text:'Select - got the confirmation',anticipation:'Onboarding 3-4 weeks',created_at:'2026-04-01'},
 ];
 
 /** Fields we audit on a requisition. Any change to these writes a StaffingHistoryEntry. */
@@ -354,9 +354,9 @@ export const useStaffingStore = create<StaffingState>()(
     }),
     {
       name: 'simpliigence-staffing',
-      version: 5,
+      version: 6,
       // NON-DESTRUCTIVE migrate: preserves every existing requisition/status/account;
-      // only fills in new fields with safe defaults.
+      // only fills in new fields with safe defaults and bumps 2025 → 2026 on date fields.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       migrate: (persisted: any) => {
         if (!persisted) {
@@ -367,18 +367,33 @@ export const useStaffingStore = create<StaffingState>()(
             history: [],
           };
         }
+        const bumpYear = (d: string | undefined | null) =>
+          typeof d === 'string' && d.startsWith('2025') ? '2026' + d.slice(4) : d || '';
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const upgradedAccounts = (persisted.accounts || SEED_ACCOUNTS).map((a: any) => ({
+          ...a,
+          created_at: bumpYear(a.created_at),
+        }));
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const upgradedReqs = (persisted.requisitions || SEED_REQS).map((r: any) => ({
           ...r,
-          start_date: r.start_date || (r.created_at ? String(r.created_at).slice(0, 10) : today()),
-          close_by_date: r.close_by_date || '',
+          created_at: bumpYear(r.created_at),
+          updated_at: bumpYear(r.updated_at),
+          start_date: bumpYear(r.start_date) || (r.created_at ? String(bumpYear(r.created_at)).slice(0, 10) : today()),
+          close_by_date: bumpYear(r.close_by_date) || '',
           probability: typeof r.probability === 'number' ? r.probability : 0,
           ai_probability: typeof r.ai_probability === 'number' ? r.ai_probability : 0,
         }));
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const upgradedStatuses = (persisted.statuses || SEED_STATUSES).map((s: any) => ({
+          ...s,
+          status_date: bumpYear(s.status_date),
+          created_at: bumpYear(s.created_at),
+        }));
         return {
-          accounts: persisted.accounts || SEED_ACCOUNTS,
+          accounts: upgradedAccounts,
           requisitions: upgradedReqs,
-          statuses: persisted.statuses || SEED_STATUSES,
+          statuses: upgradedStatuses,
           history: persisted.history || [],
         };
       },
