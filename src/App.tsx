@@ -160,8 +160,9 @@ function useSupabaseInit() {
               accounts: id.accounts,
               requisitions: id.requisitions,
               statuses: id.statuses,
+              history: id.history || [],
             });
-            console.log('[supabase] Loaded india staffing:', id.accounts.length, 'accounts,', id.requisitions.length, 'reqs');
+            console.log('[supabase] Loaded india staffing:', id.accounts.length, 'accounts,', id.requisitions.length, 'reqs,', (id.history || []).length, 'history entries');
           } else {
             // Supabase empty — push local/seed data
             const local = useStaffingStore.getState();

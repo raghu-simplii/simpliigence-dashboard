@@ -7,10 +7,16 @@ import type {
   DailyStatus,
   StaffingStatus,
   PipelineStage,
+  StaffingHistoryEntry,
 } from '../types/staffing';
 import { db } from '../lib/supabaseSync';
+import { CLIENT_ID } from '../lib/supabase';
+import { analyzeStaffingStatus } from '../lib/staffingAnalysis';
 
-/* ââ Seed data from original Staffing.xlsx ââ */
+/* ── Helper: build default new-requisition fields ── */
+const today = () => new Date().toISOString().slice(0, 10);
+
+/* ── Seed data from original Staffing.xlsx ── */
 const SEED_ACCOUNTS: StaffingAccount[] = [
   { id: 'acct-1', name: 'Acuity', created_at: '2025-03-01' },
   { id: 'acct-2', name: 'Amex', created_at: '2025-03-01' },
@@ -20,33 +26,43 @@ const SEED_ACCOUNTS: StaffingAccount[] = [
   { id: 'acct-6', name: 'Merck', created_at: '2025-03-01' },
 ];
 
+const seedReq = (p: Partial<StaffingRequisition> & { id: string; account_id: string; title: string; month: string; new_positions: number; expected_closure: string; anticipation: string; created_at: string; updated_at: string; }): StaffingRequisition => ({
+  start_date: p.created_at || '2025-03-01',
+  close_by_date: '',
+  status_field: 'In Progress' as StaffingStatus,
+  stage: 'Sourcing' as PipelineStage,
+  client_spoc: '',
+  department: '',
+  probability: 0,
+  ai_probability: 0,
+  ...p,
+} as StaffingRequisition);
+
 const SEED_REQS: StaffingRequisition[] = [
-  {id:'r1',account_id:'acct-1',title:'Mixed (FSL Architect, Python+AI, .Net FullStack)',month:'March',new_positions:6,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Expecting closures in early next week',client_spoc:'',department:'',location:'',created_at:'2025-03-01',updated_at:'2025-03-27'},
-  {id:'r2',account_id:'acct-2',title:'Product Owner',month:'March',new_positions:2,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Expecting onboarding Mon/Early next week',client_spoc:'',department:'',location:'',created_at:'2025-03-01',updated_at:'2025-03-27'},
-  {id:'r3',account_id:'acct-3',title:'AI Architect - Healthcare',month:'March',new_positions:2,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'No hopes. Expecting the L1 Selection',client_spoc:'',department:'',location:'',created_at:'2025-03-01',updated_at:'2025-03-26'},
-  {id:'r4',account_id:'acct-3',title:'AI',month:'March',new_positions:1,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Expecting client call - no hopes',client_spoc:'',department:'',location:'',created_at:'2025-03-01',updated_at:'2025-03-26'},
-  {id:'r5',account_id:'acct-3',title:'DevOps',month:'March',new_positions:2,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'No hopes. Expecting at least one selection',client_spoc:'',department:'',location:'',created_at:'2025-03-01',updated_at:'2025-03-25'},
-  {id:'r6',account_id:'acct-3',title:'Java',month:'March',new_positions:10,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'No hopes. Screening but no hopes on closures',client_spoc:'',department:'',location:'',created_at:'2025-03-01',updated_at:'2025-03-27'},
-  {id:'r7',account_id:'acct-4',title:'Support',month:'March',new_positions:4,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Expecting the slots',client_spoc:'',department:'',location:'',created_at:'2025-03-01',updated_at:'2025-03-27'},
-  {id:'r8',account_id:'acct-4',title:'Developer',month:'March',new_positions:3,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Expecting one more slot',client_spoc:'',department:'',location:'',created_at:'2025-03-01',updated_at:'2025-03-18'},
-  {id:'r9',account_id:'acct-4',title:'Lead',month:'March',new_positions:1,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Expecting slots 03/23 or 03/24',client_spoc:'',department:'',location:'',created_at:'2025-03-01',updated_at:'2025-03-26'},
-  {id:'r10',account_id:'acct-5',title:'CPQ/Conga Architect',month:'March',new_positions:1,expected_closure:'Overdue',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Expecting the onboarding date',client_spoc:'',department:'',location:'',created_at:'2025-03-01',updated_at:'2025-03-24'},
-  {id:'r11',account_id:'acct-5',title:'CPQ/Conga Developer',month:'March',new_positions:1,expected_closure:'Overdue',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Expecting the onboarding date',client_spoc:'',department:'',location:'',created_at:'2025-03-01',updated_at:'2025-03-24'},
-  {id:'r12',account_id:'acct-5',title:'CPQ Architect + AI',month:'March',new_positions:1,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'No hopes. Expecting more slots',client_spoc:'',department:'',location:'',created_at:'2025-03-01',updated_at:'2025-03-26'},
-  {id:'r13',account_id:'acct-5',title:'CPQ Developer + AI',month:'March',new_positions:2,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Expecting select or more client discussion',client_spoc:'',department:'',location:'',created_at:'2025-03-01',updated_at:'2025-03-25'},
-  {id:'r14',account_id:'acct-5',title:'LWC/Integration',month:'March',new_positions:1,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Expecting the L1 slot',client_spoc:'',department:'',location:'',created_at:'2025-03-01',updated_at:'2025-03-26'},
-  {id:'r15',account_id:'acct-5',title:'Dev Lead - Salescloud, CPQ',month:'March',new_positions:1,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Expecting at least 1 to hit',client_spoc:'',department:'',location:'',created_at:'2025-03-01',updated_at:'2025-03-26'},
-  {id:'r16',account_id:'acct-5',title:'Service Cloud Voice Tech Lead + Architect',month:'March',new_positions:2,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'R1 should clear',client_spoc:'',department:'',location:'',created_at:'2025-03-01',updated_at:'2025-03-27'},
-  {id:'r17',account_id:'acct-5',title:'SF Architect (Sales, Conga CPQ, CLM)',month:'March',new_positions:1,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'No hopes. Expecting clarity on role',client_spoc:'',department:'',location:'',created_at:'2025-03-01',updated_at:'2025-03-27'},
-  {id:'r18',account_id:'acct-5',title:'SF Automation QA (ACCELQ)',month:'March',new_positions:1,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Expecting the slots',client_spoc:'',department:'',location:'',created_at:'2025-03-01',updated_at:'2025-03-24'},
-  {id:'r19',account_id:'acct-5',title:'Salesforce Agentforce (7+ Yrs)',month:'March',new_positions:1,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'No hopes. Expecting L1 Selection',client_spoc:'',department:'',location:'',created_at:'2025-03-01',updated_at:'2025-03-25'},
-  {id:'r20',account_id:'acct-5',title:'SF Vlocity',month:'March',new_positions:1,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'No hopes. Expecting L1 Selection',client_spoc:'',department:'',location:'',created_at:'2025-03-01',updated_at:'2025-03-18'},
-  {id:'r21',account_id:'acct-6',title:'SF Developer',month:'March',new_positions:1,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Expecting client discussion',client_spoc:'',department:'',location:'',created_at:'2025-03-01',updated_at:'2025-03-27'},
-  {id:'r22',account_id:'acct-6',title:'SF Service Cloud CTI',month:'March',new_positions:1,expected_closure:'March End',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Expecting client discussion',client_spoc:'',department:'',location:'',created_at:'2025-03-01',updated_at:'2025-03-23'},
+  seedReq({id:'r1',account_id:'acct-1',title:'Mixed (FSL Architect, Python+AI, .Net FullStack)',month:'March',new_positions:6,expected_closure:'March End',anticipation:'Expecting closures in early next week',created_at:'2025-03-01',updated_at:'2025-03-27'}),
+  seedReq({id:'r2',account_id:'acct-2',title:'Product Owner',month:'March',new_positions:2,expected_closure:'March End',anticipation:'Expecting onboarding Mon/Early next week',created_at:'2025-03-01',updated_at:'2025-03-27'}),
+  seedReq({id:'r3',account_id:'acct-3',title:'AI Architect - Healthcare',month:'March',new_positions:2,expected_closure:'March End',anticipation:'No hopes. Expecting the L1 Selection',created_at:'2025-03-01',updated_at:'2025-03-26'}),
+  seedReq({id:'r4',account_id:'acct-3',title:'AI',month:'March',new_positions:1,expected_closure:'March End',anticipation:'Expecting client call - no hopes',created_at:'2025-03-01',updated_at:'2025-03-26'}),
+  seedReq({id:'r5',account_id:'acct-3',title:'DevOps',month:'March',new_positions:2,expected_closure:'March End',anticipation:'No hopes. Expecting at least one selection',created_at:'2025-03-01',updated_at:'2025-03-25'}),
+  seedReq({id:'r6',account_id:'acct-3',title:'Java',month:'March',new_positions:10,expected_closure:'March End',anticipation:'No hopes. Screening but no hopes on closures',created_at:'2025-03-01',updated_at:'2025-03-27'}),
+  seedReq({id:'r7',account_id:'acct-4',title:'Support',month:'March',new_positions:4,expected_closure:'March End',anticipation:'Expecting the slots',created_at:'2025-03-01',updated_at:'2025-03-27'}),
+  seedReq({id:'r8',account_id:'acct-4',title:'Developer',month:'March',new_positions:3,expected_closure:'March End',anticipation:'Expecting one more slot',created_at:'2025-03-01',updated_at:'2025-03-18'}),
+  seedReq({id:'r9',account_id:'acct-4',title:'Lead',month:'March',new_positions:1,expected_closure:'March End',anticipation:'Expecting slots 03/23 or 03/24',created_at:'2025-03-01',updated_at:'2025-03-26'}),
+  seedReq({id:'r10',account_id:'acct-5',title:'CPQ/Conga Architect',month:'March',new_positions:1,expected_closure:'Overdue',anticipation:'Expecting the onboarding date',created_at:'2025-03-01',updated_at:'2025-03-24'}),
+  seedReq({id:'r11',account_id:'acct-5',title:'CPQ/Conga Developer',month:'March',new_positions:1,expected_closure:'Overdue',anticipation:'Expecting the onboarding date',created_at:'2025-03-01',updated_at:'2025-03-24'}),
+  seedReq({id:'r12',account_id:'acct-5',title:'CPQ Architect + AI',month:'March',new_positions:1,expected_closure:'March End',anticipation:'No hopes. Expecting more slots',created_at:'2025-03-01',updated_at:'2025-03-26'}),
+  seedReq({id:'r13',account_id:'acct-5',title:'CPQ Developer + AI',month:'March',new_positions:2,expected_closure:'March End',anticipation:'Expecting select or more client discussion',created_at:'2025-03-01',updated_at:'2025-03-25'}),
+  seedReq({id:'r14',account_id:'acct-5',title:'LWC/Integration',month:'March',new_positions:1,expected_closure:'March End',anticipation:'Expecting the L1 slot',created_at:'2025-03-01',updated_at:'2025-03-26'}),
+  seedReq({id:'r15',account_id:'acct-5',title:'Dev Lead - Salescloud, CPQ',month:'March',new_positions:1,expected_closure:'March End',anticipation:'Expecting at least 1 to hit',created_at:'2025-03-01',updated_at:'2025-03-26'}),
+  seedReq({id:'r16',account_id:'acct-5',title:'Service Cloud Voice Tech Lead + Architect',month:'March',new_positions:2,expected_closure:'March End',anticipation:'R1 should clear',created_at:'2025-03-01',updated_at:'2025-03-27'}),
+  seedReq({id:'r17',account_id:'acct-5',title:'SF Architect (Sales, Conga CPQ, CLM)',month:'March',new_positions:1,expected_closure:'March End',anticipation:'No hopes. Expecting clarity on role',created_at:'2025-03-01',updated_at:'2025-03-27'}),
+  seedReq({id:'r18',account_id:'acct-5',title:'SF Automation QA (ACCELQ)',month:'March',new_positions:1,expected_closure:'March End',anticipation:'Expecting the slots',created_at:'2025-03-01',updated_at:'2025-03-24'}),
+  seedReq({id:'r19',account_id:'acct-5',title:'Salesforce Agentforce (7+ Yrs)',month:'March',new_positions:1,expected_closure:'March End',anticipation:'No hopes. Expecting L1 Selection',created_at:'2025-03-01',updated_at:'2025-03-25'}),
+  seedReq({id:'r20',account_id:'acct-5',title:'SF Vlocity',month:'March',new_positions:1,expected_closure:'March End',anticipation:'No hopes. Expecting L1 Selection',created_at:'2025-03-01',updated_at:'2025-03-18'}),
+  seedReq({id:'r21',account_id:'acct-6',title:'SF Developer',month:'March',new_positions:1,expected_closure:'March End',anticipation:'Expecting client discussion',created_at:'2025-03-01',updated_at:'2025-03-27'}),
+  seedReq({id:'r22',account_id:'acct-6',title:'SF Service Cloud CTI',month:'March',new_positions:1,expected_closure:'March End',anticipation:'Expecting client discussion',created_at:'2025-03-01',updated_at:'2025-03-23'}),
   // April — only genuinely NEW positions (not carried over from March)
-  {id:'r23',account_id:'acct-1',title:'SF Architect / Python+AI / Solution Architect',month:'April',new_positions:3,expected_closure:'7th April',close_by_date:'',status_field:'In Progress' as StaffingStatus,stage:'Sourcing' as PipelineStage,anticipation:'Python+AI shall close one of 3 proposed',client_spoc:'',department:'',location:'',created_at:'2025-04-01',updated_at:'2025-04-02'},
-  // NOTE: Carried-over positions (Amex PO, Ciklum Java, Ness Support/Dev/Lead, Persistent roles, Merck roles)
-  // are NOT duplicated here. They stay as the original March rows and get status updates linked to them.
+  seedReq({id:'r23',account_id:'acct-1',title:'SF Architect / Python+AI / Solution Architect',month:'April',new_positions:3,expected_closure:'7th April',anticipation:'Python+AI shall close one of 3 proposed',created_at:'2025-04-01',updated_at:'2025-04-02'}),
 ];
 
 const SEED_STATUSES: DailyStatus[] = [
@@ -65,7 +81,6 @@ const SEED_STATUSES: DailyStatus[] = [
   {id:'s13',requisition_id:'r6',status_date:'2025-03-17',status_text:'Planning to share 09 profiles',anticipation:'',created_at:'2025-03-17'},
   {id:'s14',requisition_id:'r7',status_date:'2025-03-27',status_text:'1 Select out of 3 & Need more profiles',anticipation:'',created_at:'2025-03-27'},
   {id:'s15',requisition_id:'r7',status_date:'2025-03-26',status_text:'2 Interviews done, 1 select for next round',anticipation:'',created_at:'2025-03-26'},
-  // April statuses — linked to ORIGINAL March requisition IDs (no duplicates)
   {id:'s16',requisition_id:'r23',status_date:'2025-04-02',status_text:'SF Architect: Shared 4 profiles. Python+AI: Awaiting feedback. 2 Backfill interviews in place',anticipation:'Python+AI shall close one of 3',created_at:'2025-04-02'},
   {id:'s17',requisition_id:'r2',status_date:'2025-04-02',status_text:'Identified Resources & Working on onboarding Process',anticipation:'In Onboarding discussion',created_at:'2025-04-02'},
   {id:'s18',requisition_id:'r2',status_date:'2025-04-01',status_text:'In Onboarding discussion',anticipation:'',created_at:'2025-04-01'},
@@ -77,21 +92,42 @@ const SEED_STATUSES: DailyStatus[] = [
   {id:'s24',requisition_id:'r22',status_date:'2025-04-01',status_text:'Select - got the confirmation',anticipation:'Onboarding 3-4 weeks',created_at:'2025-04-01'},
 ];
 
-/* ââ Store shape ââ */
+/** Fields we audit on a requisition. Any change to these writes a StaffingHistoryEntry. */
+const AUDITED_FIELDS: (keyof StaffingRequisition)[] = [
+  'title', 'account_id', 'month', 'new_positions', 'expected_closure',
+  'start_date', 'close_by_date', 'status_field', 'stage', 'anticipation',
+  'client_spoc', 'department', 'probability', 'ai_probability',
+];
+
+/** Re-compute AI probability from linked statuses. */
+function computeAiProbability(req: StaffingRequisition, statuses: DailyStatus[]): number {
+  const reqStatuses = statuses
+    .filter((s) => s.requisition_id === req.id)
+    .sort((a, b) => b.status_date.localeCompare(a.status_date));
+  const combinedStatus = reqStatuses.map((s) => `${s.status_date.slice(5).replace('-', '/')}: ${s.status_text}`).join('\n');
+  const latestAnticipation = reqStatuses[0]?.anticipation || req.anticipation;
+  return analyzeStaffingStatus(combinedStatus, latestAnticipation).score;
+}
+
+/* ── Store shape ── */
 interface StaffingState {
   accounts: StaffingAccount[];
   requisitions: StaffingRequisition[];
   statuses: DailyStatus[];
+  history: StaffingHistoryEntry[];
 
   addAccount: (name: string) => StaffingAccount;
   removeAccount: (id: string) => void;
 
-  addRequisition: (req: Omit<StaffingRequisition, 'id' | 'created_at' | 'updated_at'>) => StaffingRequisition;
+  addRequisition: (req: Omit<StaffingRequisition, 'id' | 'created_at' | 'updated_at' | 'ai_probability'> & Partial<Pick<StaffingRequisition, 'ai_probability'>>) => StaffingRequisition;
   updateRequisition: (id: string, patch: Partial<StaffingRequisition>) => void;
   removeRequisition: (id: string) => void;
 
   addStatus: (s: Omit<DailyStatus, 'id' | 'created_at'>) => DailyStatus;
   removeStatus: (id: string) => void;
+
+  /** Read-only helper: get history rows for a specific requisition, newest first. */
+  historyFor: (requisitionId: string) => StaffingHistoryEntry[];
 
   importRows: (rows: Array<{
     month: string; account: string; requisition: string;
@@ -100,7 +136,12 @@ interface StaffingState {
   }>) => { imported: number; errors: string[] };
 
   /** Internal: called by realtime subscriptions to hydrate from Supabase */
-  _setFromSupabase: (accounts: StaffingAccount[], requisitions: StaffingRequisition[], statuses: DailyStatus[]) => void;
+  _setFromSupabase: (
+    accounts: StaffingAccount[],
+    requisitions: StaffingRequisition[],
+    statuses: DailyStatus[],
+    history?: StaffingHistoryEntry[],
+  ) => void;
 }
 
 export const useStaffingStore = create<StaffingState>()(
@@ -109,6 +150,7 @@ export const useStaffingStore = create<StaffingState>()(
       accounts: SEED_ACCOUNTS,
       requisitions: SEED_REQS,
       statuses: SEED_STATUSES,
+      history: [],
 
       addAccount: (name) => {
         const acct: StaffingAccount = { id: nanoid(), name, created_at: new Date().toISOString() };
@@ -130,33 +172,92 @@ export const useStaffingStore = create<StaffingState>()(
 
       addRequisition: (req) => {
         const now = new Date().toISOString();
-        const r: StaffingRequisition = { ...req, id: nanoid(), created_at: now, updated_at: now };
+        const r: StaffingRequisition = {
+          ...req,
+          ai_probability: req.ai_probability ?? 0,
+          id: nanoid(),
+          created_at: now,
+          updated_at: now,
+        };
         set((s) => ({ requisitions: [...s.requisitions, r] }));
         db.upsertIndiaRequisition(r);
         return r;
       },
 
       updateRequisition: (id, patch) => {
+        const prev = get().requisitions.find((r) => r.id === id);
+        if (!prev) return;
+
+        // Build history entries for every audited field whose value actually changed
+        const now = new Date().toISOString();
+        const newHistory: StaffingHistoryEntry[] = [];
+        for (const field of AUDITED_FIELDS) {
+          if (!(field in patch)) continue;
+          const oldVal = prev[field];
+          const newVal = (patch as Record<string, unknown>)[field];
+          if (oldVal === newVal) continue;
+          newHistory.push({
+            id: nanoid(),
+            requisition_id: id,
+            field: String(field),
+            old_value: oldVal == null ? '' : String(oldVal),
+            new_value: newVal == null ? '' : String(newVal),
+            changed_at: now,
+            changed_by: CLIENT_ID,
+          });
+        }
+
         set((s) => ({
           requisitions: s.requisitions.map((r) =>
-            r.id === id ? { ...r, ...patch, updated_at: new Date().toISOString() } : r,
+            r.id === id ? { ...r, ...patch, updated_at: now } : r,
           ),
+          history: [...s.history, ...newHistory],
         }));
         const updated = get().requisitions.find((r) => r.id === id);
         if (updated) db.upsertIndiaRequisition(updated);
+        if (newHistory.length) db.insertIndiaHistory(newHistory);
       },
 
       removeRequisition: (id) => {
         set((s) => ({
           requisitions: s.requisitions.filter((r) => r.id !== id),
           statuses: s.statuses.filter((st) => st.requisition_id !== id),
+          // keep history entries so deletions remain auditable
         }));
         db.deleteIndiaRequisition(id);
       },
 
       addStatus: (input) => {
         const ds: DailyStatus = { ...input, id: nanoid(), created_at: new Date().toISOString() };
-        set((s) => ({ statuses: [...s.statuses, ds] }));
+        set((s) => {
+          const nextStatuses = [...s.statuses, ds];
+          // Re-score AI probability for the affected requisition
+          const req = s.requisitions.find((r) => r.id === ds.requisition_id);
+          if (!req) return { statuses: nextStatuses };
+          const newAi = computeAiProbability(req, nextStatuses);
+          if (newAi === req.ai_probability) return { statuses: nextStatuses };
+          const now = new Date().toISOString();
+          const histEntry: StaffingHistoryEntry = {
+            id: nanoid(),
+            requisition_id: req.id,
+            field: 'ai_probability',
+            old_value: String(req.ai_probability ?? 0),
+            new_value: String(newAi),
+            changed_at: now,
+            changed_by: CLIENT_ID,
+          };
+          const updatedReq = { ...req, ai_probability: newAi, updated_at: now };
+          // Fire-and-forget persistence outside set()
+          queueMicrotask(() => {
+            db.upsertIndiaRequisition(updatedReq);
+            db.insertIndiaHistory([histEntry]);
+          });
+          return {
+            statuses: nextStatuses,
+            requisitions: s.requisitions.map((r) => (r.id === req.id ? updatedReq : r)),
+            history: [...s.history, histEntry],
+          };
+        });
         db.upsertIndiaStatus(ds);
         return ds;
       },
@@ -165,6 +266,11 @@ export const useStaffingStore = create<StaffingState>()(
         set((s) => ({ statuses: s.statuses.filter((st) => st.id !== id) }));
         db.deleteIndiaStatus(id);
       },
+
+      historyFor: (requisitionId) =>
+        get().history
+          .filter((h) => h.requisition_id === requisitionId)
+          .sort((a, b) => b.changed_at.localeCompare(a.changed_at)),
 
       importRows: (rows) => {
         const state = get();
@@ -186,21 +292,19 @@ export const useStaffingStore = create<StaffingState>()(
               acct = { id: nanoid(), name: row.account, created_at: new Date().toISOString() };
               newAccounts.push(acct);
             }
-            // First try exact match (same account + title + month)
             let req = newReqs.find(
               (r) => r.account_id === acct!.id && r.title === row.requisition && r.month === row.month,
             );
-            // If no exact match, look for same account + title that's still open (carried-over position)
             if (!req) {
               req = newReqs.find(
                 (r) =>
                   r.account_id === acct!.id &&
                   r.title === row.requisition &&
                   r.status_field !== 'Closed' &&
-                  r.status_field !== 'Cancelled',
+                  r.status_field !== 'Cancelled' &&
+                  r.status_field !== 'Lost',
               );
               if (req) {
-                // Update the existing row's month to the new month (carry forward)
                 req.month = row.month;
                 req.updated_at = new Date().toISOString();
                 if (row.new_positions) req.new_positions = row.new_positions;
@@ -213,8 +317,15 @@ export const useStaffingStore = create<StaffingState>()(
               req = {
                 id: nanoid(), account_id: acct.id, title: row.requisition, month: row.month,
                 new_positions: row.new_positions || 0,
-                expected_closure: row.expected_closure || '', close_by_date: '', status_field: 'Open' as StaffingStatus, stage: 'Sourcing' as PipelineStage,
-                anticipation: row.anticipation || '', client_spoc: '', department: '', location: '',
+                expected_closure: row.expected_closure || '',
+                start_date: today(),
+                close_by_date: '',
+                status_field: 'Open' as StaffingStatus,
+                stage: 'Sourcing' as PipelineStage,
+                anticipation: row.anticipation || '',
+                client_spoc: '', department: '',
+                probability: 0,
+                ai_probability: 0,
                 created_at: now, updated_at: now,
               };
               newReqs.push(req);
@@ -238,18 +349,37 @@ export const useStaffingStore = create<StaffingState>()(
         return { imported, errors };
       },
 
-      _setFromSupabase: (accounts, requisitions, statuses) => set({ accounts, requisitions, statuses }),
+      _setFromSupabase: (accounts, requisitions, statuses, history) =>
+        set({ accounts, requisitions, statuses, ...(history ? { history } : {}) }),
     }),
     {
       name: 'simpliigence-staffing',
-      version: 4,
-      migrate: () => {
-        // v4: Removed duplicate April carry-over requisitions from seed data.
-        // Force re-seed by returning fresh state.
+      version: 5,
+      // NON-DESTRUCTIVE migrate: preserves every existing requisition/status/account;
+      // only fills in new fields with safe defaults.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      migrate: (persisted: any) => {
+        if (!persisted) {
+          return {
+            accounts: SEED_ACCOUNTS,
+            requisitions: SEED_REQS,
+            statuses: SEED_STATUSES,
+            history: [],
+          };
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const upgradedReqs = (persisted.requisitions || SEED_REQS).map((r: any) => ({
+          ...r,
+          start_date: r.start_date || (r.created_at ? String(r.created_at).slice(0, 10) : today()),
+          close_by_date: r.close_by_date || '',
+          probability: typeof r.probability === 'number' ? r.probability : 0,
+          ai_probability: typeof r.ai_probability === 'number' ? r.ai_probability : 0,
+        }));
         return {
-          accounts: SEED_ACCOUNTS,
-          requisitions: SEED_REQS,
-          statuses: SEED_STATUSES,
+          accounts: persisted.accounts || SEED_ACCOUNTS,
+          requisitions: upgradedReqs,
+          statuses: persisted.statuses || SEED_STATUSES,
+          history: persisted.history || [],
         };
       },
     },

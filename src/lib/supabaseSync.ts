@@ -13,7 +13,7 @@ import type { ForecastAssignment, Month, ZohoPipelineProject } from '../types/fo
 import type { FinancialSettings } from '../types/financial';
 import type { ConciergeConfig, ScenarioSettings, StaffingRequest } from '../types/hiringForecast';
 import { emptyMonthRecord } from '../types/forecast';
-import type { StaffingAccount as IndiaAccount, StaffingRequisition as IndiaRequisition, DailyStatus } from '../types/staffing';
+import type { StaffingAccount as IndiaAccount, StaffingRequisition as IndiaRequisition, DailyStatus, StaffingHistoryEntry } from '../types/staffing';
 import type { USStaffingAccount, USStaffingRequisition, AccountCategory } from '../types/usStaffing';
 
 // ─── Conversion helpers ────────────────────────────────────────────
@@ -136,9 +136,12 @@ function indiaReqToRow(r: IndiaRequisition) {
   return {
     id: r.id, account_id: r.account_id, title: r.title, month: r.month,
     new_positions: r.new_positions, expected_closure: r.expected_closure,
+    start_date: r.start_date,
     close_by_date: r.close_by_date, status_field: r.status_field,
     stage: r.stage, anticipation: r.anticipation,
-    client_spoc: r.client_spoc, department: r.department, location: r.location,
+    client_spoc: r.client_spoc, department: r.department,
+    probability: r.probability ?? 0,
+    ai_probability: r.ai_probability ?? 0,
     created_at: r.created_at, updated_at: r.updated_at, updated_by: CLIENT_ID,
   };
 }
@@ -147,10 +150,38 @@ function rowToIndiaReq(row: any): IndiaRequisition {
   return {
     id: row.id, account_id: row.account_id, title: row.title, month: row.month,
     new_positions: row.new_positions ?? 0, expected_closure: row.expected_closure ?? '',
+    start_date: row.start_date ?? '',
     close_by_date: row.close_by_date ?? '', status_field: row.status_field ?? 'Open',
     stage: row.stage ?? 'Sourcing', anticipation: row.anticipation ?? '',
-    client_spoc: row.client_spoc ?? '', department: row.department ?? '', location: row.location ?? '',
+    client_spoc: row.client_spoc ?? '', department: row.department ?? '',
+    probability: row.probability ?? 0,
+    ai_probability: row.ai_probability ?? 0,
     created_at: row.created_at, updated_at: row.updated_at,
+  };
+}
+
+function historyToRow(h: StaffingHistoryEntry) {
+  return {
+    id: h.id,
+    requisition_id: h.requisition_id,
+    field: h.field,
+    old_value: h.old_value,
+    new_value: h.new_value,
+    changed_at: h.changed_at,
+    changed_by: h.changed_by,
+    updated_by: CLIENT_ID,
+  };
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToHistory(row: any): StaffingHistoryEntry {
+  return {
+    id: row.id,
+    requisition_id: row.requisition_id,
+    field: row.field,
+    old_value: row.old_value ?? '',
+    new_value: row.new_value ?? '',
+    changed_at: row.changed_at,
+    changed_by: row.changed_by ?? '',
   };
 }
 
@@ -261,20 +292,26 @@ export async function fetchPipelineProjects(): Promise<ZohoPipelineProject[] | n
 
 // ─── India Staffing fetchers ──────────────────────────────────────
 
-export async function fetchIndiaStaffing(): Promise<{ accounts: IndiaAccount[]; requisitions: IndiaRequisition[]; statuses: DailyStatus[] } | null> {
-  const [acctRes, reqRes, statusRes] = await Promise.all([
+export async function fetchIndiaStaffing(): Promise<{ accounts: IndiaAccount[]; requisitions: IndiaRequisition[]; statuses: DailyStatus[]; history: StaffingHistoryEntry[] } | null> {
+  const [acctRes, reqRes, statusRes, histRes] = await Promise.all([
     supabase.from('india_staffing_accounts').select('*'),
     supabase.from('india_staffing_requisitions').select('*'),
     supabase.from('india_staffing_statuses').select('*'),
+    supabase.from('india_staffing_history').select('*'),
   ]);
   if (acctRes.error || reqRes.error || statusRes.error) {
     console.warn('[supabase] fetch india staffing failed:', acctRes.error?.message, reqRes.error?.message, statusRes.error?.message);
     return null;
   }
+  if (histRes.error) {
+    // History table may not exist yet on older deployments — don't fail the whole fetch
+    console.warn('[supabase] fetch india history failed (table may be missing):', histRes.error.message);
+  }
   return {
     accounts: (acctRes.data || []).map(rowToIndiaAccount),
     requisitions: (reqRes.data || []).map(rowToIndiaReq),
     statuses: (statusRes.data || []).map(rowToDailyStatus),
+    history: (histRes.data || []).map(rowToHistory),
   };
 }
 
@@ -476,6 +513,11 @@ export const db = {
     const { error } = await supabase.from('india_staffing_statuses').delete().eq('id', id);
     if (error) console.warn('[supabase] delete india status failed:', error);
   },
+  async insertIndiaHistory(entries: StaffingHistoryEntry[]) {
+    if (!entries.length) return;
+    const { error } = await supabase.from('india_staffing_history').insert(entries.map(historyToRow));
+    if (error) console.warn('[supabase] insert india history failed:', error);
+  },
   async replaceAllIndiaStaffing(accounts: IndiaAccount[], requisitions: IndiaRequisition[], statuses: DailyStatus[]) {
     await Promise.all([
       supabase.from('india_staffing_statuses').delete().neq('id', ''),
@@ -534,6 +576,7 @@ export const db = {
       }),
       supabase.from('staffing_requests').delete().neq('id', ''),
       supabase.from('pipeline_projects').delete().neq('id', ''),
+      supabase.from('india_staffing_history').delete().neq('id', ''),
       supabase.from('india_staffing_statuses').delete().neq('id', ''),
       supabase.from('india_staffing_requisitions').delete().neq('id', ''),
       supabase.from('india_staffing_accounts').delete().neq('id', ''),
@@ -551,7 +594,7 @@ type StoreSetters = {
   setSyncConfig: (c: Record<string, unknown>) => void;
   setHiringConfig: (concierge: ConciergeConfig, scenario: ScenarioSettings, requests: StaffingRequest[]) => void;
   setPipelineProjects: (p: ZohoPipelineProject[]) => void;
-  setIndiaStaffing: (accounts: IndiaAccount[], requisitions: IndiaRequisition[], statuses: DailyStatus[]) => void;
+  setIndiaStaffing: (accounts: IndiaAccount[], requisitions: IndiaRequisition[], statuses: DailyStatus[], history?: StaffingHistoryEntry[]) => void;
   setUSStaffing: (accounts: USStaffingAccount[], requisitions: USStaffingRequisition[]) => void;
   getForecastAssignments: () => ForecastAssignment[];
   getStaffingRequests: () => StaffingRequest[];
@@ -702,7 +745,7 @@ export function setupRealtimeSubscriptions(setters: StoreSetters) {
   );
 
   // --- India Staffing (refetch all on any change) ---
-  for (const table of ['india_staffing_accounts', 'india_staffing_requisitions', 'india_staffing_statuses'] as const) {
+  for (const table of ['india_staffing_accounts', 'india_staffing_requisitions', 'india_staffing_statuses', 'india_staffing_history'] as const) {
     channel.on(
       'postgres_changes',
       { event: '*', schema: 'public', table },
@@ -711,7 +754,7 @@ export function setupRealtimeSubscriptions(setters: StoreSetters) {
         const row = (payload.new || payload.old) as any;
         if (row?.updated_by === CLIENT_ID) return;
         fetchIndiaStaffing().then((data) => {
-          if (data) setters.setIndiaStaffing(data.accounts, data.requisitions, data.statuses);
+          if (data) setters.setIndiaStaffing(data.accounts, data.requisitions, data.statuses, data.history);
         });
       },
     );

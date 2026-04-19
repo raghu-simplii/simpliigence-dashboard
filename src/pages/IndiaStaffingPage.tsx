@@ -2,23 +2,39 @@
 import React, { useState, useMemo, useRef, useCallback } from 'react';
 import {
   Users, AlertTriangle, TrendingUp, CheckCircle, Upload,
-  Download, Brain, BarChart3, Building2, Pencil, Trash2, Save, X, ChevronDown, ChevronRight, Plus,
+  Download, Brain, BarChart3, Building2, Pencil, Trash2, Save, X, ChevronDown, ChevronRight, Plus, Archive, History,
 } from 'lucide-react';
 import { useStaffingStore } from '../store/useStaffingStore';
 import { analyzeStaffingStatus } from '../lib/staffingAnalysis';
 import { PageHeader } from '../components/shared/PageHeader';
 import { Card, StatCard, StatusBadge } from '../components/ui';
 import type { StaffingRow, RiskLevel, PipelineStage, StaffingStatus } from '../types/staffing';
-import { STAGE_COLORS } from '../types/staffing';
+import { STAGE_COLORS, ARCHIVED_STATUSES } from '../types/staffing';
 
 /* -- Constants -- */
-const STATUS_OPTIONS: StaffingStatus[] = ['Open', 'In Progress', 'On Hold', 'Closed', 'Cancelled'];
+const STATUS_OPTIONS: StaffingStatus[] = ['Open', 'In Progress', 'On Hold', 'Closed', 'Lost', 'Cancelled'];
 const STATUS_COLORS: Record<StaffingStatus, string> = {
-  'Open': '#3b82f6', 'In Progress': '#f59e0b', 'On Hold': '#94a3b8', 'Closed': '#10b981', 'Cancelled': '#ef4444',
+  'Open': '#3b82f6',
+  'In Progress': '#f59e0b',
+  'On Hold': '#94a3b8',
+  'Closed': '#10b981',
+  'Lost': '#b91c1c',
+  'Cancelled': '#ef4444',
 };
 const probColor = (p: number) => p >= 65 ? '#10b981' : p >= 40 ? '#f59e0b' : '#ef4444';
 const PIPELINE_STAGES: PipelineStage[] = ['Sourcing','Profiles Shared','Interview','Shortlisted','Client Round','Closed/Selected','Onboarding'];
 const ALL_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+const isArchived = (s: StaffingStatus) => ARCHIVED_STATUSES.includes(s);
+
+/** Days between today (UTC midnight) and an ISO date string. Returns 0 if missing/invalid. */
+function calcAgeing(startDate: string): number {
+  if (!startDate) return 0;
+  const start = Date.parse(startDate);
+  if (Number.isNaN(start)) return 0;
+  const today = Date.parse(new Date().toISOString().slice(0, 10));
+  return Math.max(0, Math.round((today - start) / 86400000));
+}
 
 /* -- Editable Cell -- */
 function EditableCell({ value, onSave, type = 'text', options, className = '', displayContent }: {
@@ -78,7 +94,7 @@ function EditableCell({ value, onSave, type = 'text', options, className = '', d
 
 
 export default function IndiaStaffingPage() {
-  const { accounts, requisitions, statuses, addRequisition, addStatus, addAccount, updateRequisition, removeRequisition, removeStatus, importRows } = useStaffingStore();
+  const { accounts, requisitions, statuses, history, addRequisition, addStatus, addAccount, updateRequisition, removeRequisition, removeStatus, importRows, historyFor } = useStaffingStore();
 
   const [monthFilter, setMonthFilter] = useState('all');
   const [accountFilter, setAccountFilter] = useState('all');
@@ -86,8 +102,10 @@ export default function IndiaStaffingPage() {
   const [activeTab, setActiveTab] = useState<'overview' | 'accounts' | 'forecast'>('overview');
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [showArchive, setShowArchive] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newReq, setNewReq] = useState({ accountId: '', newAccountName: '', title: '', month: 'April', positions: 1, expectedClosure: '', anticipation: '', clientSpoc: '', department: '', location: '' });
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [newReq, setNewReq] = useState({ accountId: '', newAccountName: '', title: '', month: 'April', positions: 1, expectedClosure: '', anticipation: '', clientSpoc: '', department: '', startDate: todayStr, closeByDate: '' });
   const fileRef = useRef<HTMLInputElement>(null);
 
   /* -- Build enriched rows -- */
@@ -100,22 +118,36 @@ export default function IndiaStaffingPage() {
       const combinedStatus = reqStatuses.map((s) => `${s.status_date.slice(5).replace('-', '/')}: ${s.status_text}`).join('\n');
       const latestAnticipation = reqStatuses[0]?.anticipation || req.anticipation;
       const analysis = analyzeStaffingStatus(combinedStatus, latestAnticipation);
+      const aiProbability = analysis.score; // always-fresh AI score
+      const manualProb = typeof req.probability === 'number' ? req.probability : 0;
+      const closureProb = manualProb > 0 ? manualProb : aiProbability;
       return {
         id: req.id, month: req.month, account: acct?.name || 'Unknown', account_id: req.account_id,
         requisition: req.title, newPositions: req.new_positions,
         expectedClosure: req.expected_closure,
-        closeByDate: req.close_by_date || '', statusField: req.status_field || 'Open',
+        startDate: req.start_date || '',
+        closeByDate: req.close_by_date || '',
+        ageing: calcAgeing(req.start_date || ''),
+        statusField: req.status_field || 'Open',
         status: combinedStatus, anticipation: latestAnticipation,
-        closureProb: analysis.score, risk: analysis.risk, stage: req.stage || analysis.stage, velocity: analysis.velocity,
-        clientSpoc: req.client_spoc || '', department: req.department || '', location: req.location || '',
+        probability: manualProb,
+        aiProbability,
+        closureProb,
+        risk: analysis.risk,
+        stage: req.stage || analysis.stage,
+        velocity: analysis.velocity,
+        clientSpoc: req.client_spoc || '',
+        department: req.department || '',
       };
     });
   }, [requisitions, statuses, accounts]);
 
   const months = useMemo(() => [...new Set(rows.map((r) => r.month))].sort(), [rows]);
 
+  /** Active (non-archived) rows after filters */
   const filtered = useMemo(() => {
     return rows.filter((r) => {
+      if (isArchived(r.statusField)) return false;
       if (monthFilter !== 'all' && r.month !== monthFilter) return false;
       if (accountFilter !== 'all' && r.account !== accountFilter) return false;
       if (riskFilter !== 'all' && r.risk !== riskFilter) return false;
@@ -123,7 +155,17 @@ export default function IndiaStaffingPage() {
     });
   }, [rows, monthFilter, accountFilter, riskFilter]);
 
-  /* -- KPI aggregates -- */
+  /** Archived rows (Closed / Lost / Cancelled) — also respects filters */
+  const archivedRows = useMemo(() => {
+    return rows.filter((r) => {
+      if (!isArchived(r.statusField)) return false;
+      if (monthFilter !== 'all' && r.month !== monthFilter) return false;
+      if (accountFilter !== 'all' && r.account !== accountFilter) return false;
+      return true;
+    });
+  }, [rows, monthFilter, accountFilter]);
+
+  /* -- KPI aggregates (active only) -- */
   const totalPos = filtered.reduce((s, r) => s + r.newPositions, 0);
   const closedRows = filtered.filter((r) => r.stage === 'Closed/Selected' || r.stage === 'Onboarding');
   const closedCount = closedRows.reduce((s, r) => s + r.newPositions, 0);
@@ -144,13 +186,18 @@ export default function IndiaStaffingPage() {
       case 'new_positions': patch.new_positions = Number(value); break;
       case 'client_spoc': patch.client_spoc = value; break;
       case 'department': patch.department = value; break;
-      case 'location': patch.location = value; break;
       case 'expected_closure': patch.expected_closure = value; break;
+      case 'start_date': patch.start_date = value; break;
       case 'close_by_date': patch.close_by_date = value; break;
       case 'status_field': patch.status_field = value; break;
       case 'stage': patch.stage = value; break;
       case 'anticipation': patch.anticipation = value; break;
       case 'account_id': patch.account_id = value; break;
+      case 'probability': {
+        const num = Math.max(0, Math.min(100, Number(value) || 0));
+        patch.probability = num;
+        break;
+      }
       default: return;
     }
     updateRequisition(reqId, patch);
@@ -205,9 +252,10 @@ export default function IndiaStaffingPage() {
 
   /* -- CSV export -- */
   const handleExport = () => {
-    let csv = 'Month,Account,Requisition,Positions,Client SPOC,Department,Expected Closure,Stage,Risk,Probability,Status,Anticipation\n';
-    filtered.forEach((r) => {
-      csv += `${r.month},"${r.account}","${r.requisition}",${r.newPositions},"${r.clientSpoc}","${r.department}","${r.expectedClosure}",${r.stage},${r.risk},${r.closureProb}%,"${(r.status || '').split('\n')[0]}","${r.anticipation}"\n`;
+    let csv = 'Month,Account,Requisition,Positions,Client SPOC,Department,Start Date,Close Date,Ageing (days),Stage,Status,Risk,Prob,AI Prob,Anticipation,Latest Status\n';
+    const allExport = [...filtered, ...archivedRows];
+    allExport.forEach((r) => {
+      csv += `${r.month},"${r.account}","${r.requisition}",${r.newPositions},"${r.clientSpoc}","${r.department}","${r.startDate}","${r.closeByDate}",${r.ageing},${r.stage},${r.statusField},${r.risk},${r.probability}%,${r.aiProbability}%,"${r.anticipation}","${(r.status || '').split('\n')[0]}"\n`;
     });
     const blob = new Blob([csv], { type: 'text/csv' });
     const a = document.createElement('a');
@@ -218,7 +266,6 @@ export default function IndiaStaffingPage() {
 
   const handleAddRequisition = () => {
     let accountId = newReq.accountId;
-    // Create new account if "new" is selected
     if (accountId === '__new__' && newReq.newAccountName.trim()) {
       const acct = addAccount(newReq.newAccountName.trim());
       accountId = acct.id;
@@ -231,15 +278,17 @@ export default function IndiaStaffingPage() {
       month: newReq.month,
       new_positions: newReq.positions,
       expected_closure: newReq.expectedClosure,
-      close_by_date: '',
+      start_date: newReq.startDate || todayStr,
+      close_by_date: newReq.closeByDate,
       status_field: 'Open',
       stage: 'Sourcing',
       anticipation: newReq.anticipation,
       client_spoc: newReq.clientSpoc,
       department: newReq.department,
-      location: newReq.location,
+      probability: 0,
+      ai_probability: 0,
     });
-    setNewReq({ accountId: '', newAccountName: '', title: '', month: newReq.month, positions: 1, expectedClosure: '', anticipation: '', clientSpoc: '', department: '', location: '' });
+    setNewReq({ accountId: '', newAccountName: '', title: '', month: newReq.month, positions: 1, expectedClosure: '', anticipation: '', clientSpoc: '', department: '', startDate: todayStr, closeByDate: '' });
     setShowAddForm(false);
   };
 
@@ -258,6 +307,238 @@ export default function IndiaStaffingPage() {
     });
     return map;
   }, [filtered]);
+
+  /** Table row renderer — shared between active and archive tables */
+  const renderRow = (r: StaffingRow, opts: { archived?: boolean } = {}) => {
+    const isExpanded = expandedRows.has(r.id);
+    const reqStatuses = statuses.filter(s => s.requisition_id === r.id).sort((a, b) => b.status_date.localeCompare(a.status_date));
+    const rowHistory = historyFor(r.id);
+    const fieldLabel = (f: string) => ({
+      title: 'Requisition', account_id: 'Account', month: 'Month', new_positions: 'Positions',
+      expected_closure: 'Expected Closure', start_date: 'Start Date', close_by_date: 'Close Date',
+      status_field: 'Status', stage: 'Stage', anticipation: 'Anticipation',
+      client_spoc: 'Client SPOC', department: 'Department',
+      probability: 'Prob (manual)', ai_probability: 'AI Prob',
+    } as Record<string, string>)[f] || f;
+
+    return (
+      <React.Fragment key={r.id}>
+        <tr className={`border-b border-slate-50 hover:bg-slate-50/50 ${opts.archived ? 'opacity-75' : ''}`}>
+          {/* Expand */}
+          <td className="p-1 text-center">
+            <button onClick={() => toggleRow(r.id)} className="p-0.5 rounded hover:bg-slate-100" title="Show status & audit history">
+              {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+            </button>
+          </td>
+          {/* Account */}
+          <td className="p-2">
+            <EditableCell value={r.account_id} type="select" options={accounts.map(a => a.id)}
+              onSave={(val) => handleCellSave(r.id, 'account_id', val)}
+              displayContent={<span className="font-bold">{r.account}</span>} />
+          </td>
+          {/* Requisition */}
+          <td className="p-2">
+            <EditableCell value={r.requisition} onSave={(val) => handleCellSave(r.id, 'title', val)} />
+          </td>
+          {/* Month */}
+          <td className="p-2">
+            <EditableCell value={r.month} type="select" options={ALL_MONTHS} onSave={(val) => handleCellSave(r.id, 'month', val)} />
+          </td>
+          {/* Positions */}
+          <td className="p-2 text-center">
+            <EditableCell value={r.newPositions} type="number" onSave={(val) => handleCellSave(r.id, 'new_positions', val)} className="justify-center" />
+          </td>
+          {/* Client SPOC */}
+          <td className="p-2">
+            <EditableCell value={r.clientSpoc} onSave={(val) => handleCellSave(r.id, 'client_spoc', val)} />
+          </td>
+          {/* Department */}
+          <td className="p-2">
+            <EditableCell value={r.department} onSave={(val) => handleCellSave(r.id, 'department', val)} />
+          </td>
+          {/* Start Date */}
+          <td className="p-2">
+            <input type="date" value={r.startDate}
+              className="px-1 py-0.5 text-[11px] border border-slate-200 rounded bg-white hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-400 w-[120px]"
+              onChange={(e) => handleCellSave(r.id, 'start_date', e.target.value)} />
+          </td>
+          {/* Close Date */}
+          <td className="p-2">
+            <input type="date" value={r.closeByDate}
+              className="px-1 py-0.5 text-[11px] border border-slate-200 rounded bg-white hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-400 w-[120px]"
+              onChange={(e) => handleCellSave(r.id, 'close_by_date', e.target.value)} />
+            {r.expectedClosure && <div className="text-[9px] text-slate-400 italic mt-0.5">{r.expectedClosure}</div>}
+          </td>
+          {/* Ageing */}
+          <td className="p-2 text-center">
+            <span
+              className="font-bold text-[11px] px-2 py-0.5 rounded"
+              style={{
+                color: r.ageing >= 30 ? '#b91c1c' : r.ageing >= 14 ? '#b45309' : '#334155',
+                background: r.ageing >= 30 ? '#fee2e2' : r.ageing >= 14 ? '#fef3c7' : '#f1f5f9',
+              }}
+              title={r.startDate ? `${r.ageing} days since ${r.startDate}` : 'Set a start date'}
+            >
+              {r.startDate ? `${r.ageing}d` : '—'}
+            </span>
+          </td>
+          {/* Status */}
+          <td className="p-2">
+            <EditableCell value={r.statusField} type="select" options={STATUS_OPTIONS}
+              onSave={(val) => handleCellSave(r.id, 'status_field', val)}
+              displayContent={<span className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white" style={{ background: STATUS_COLORS[r.statusField] || '#94a3b8' }}>{r.statusField}</span>} />
+          </td>
+          {/* Stage */}
+          <td className="p-2">
+            <EditableCell value={r.stage} type="select" options={PIPELINE_STAGES}
+              onSave={(val) => handleCellSave(r.id, 'stage', val)}
+              displayContent={<span className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white" style={{ background: STAGE_COLORS[r.stage] }}>{r.stage}</span>} />
+          </td>
+          {/* Risk */}
+          <td className="p-2">
+            <StatusBadge status={r.risk === 'high' ? 'at-risk' : r.risk === 'medium' ? 'caution' : 'on-track'} label={r.risk} />
+          </td>
+          {/* Prob (manual) */}
+          <td className="p-2">
+            <EditableCell
+              value={r.probability}
+              type="number"
+              onSave={(val) => handleCellSave(r.id, 'probability', val)}
+              displayContent={
+                <span className="font-bold text-[11px]" style={{ color: r.probability > 0 ? probColor(r.probability) : '#94a3b8' }}>
+                  {r.probability > 0 ? `${r.probability}%` : '—'}
+                </span>
+              }
+            />
+          </td>
+          {/* AI Prob */}
+          <td className="p-2">
+            <div className="flex items-center gap-1.5" title="AI-calculated from status history (read-only)">
+              <div className="w-10 h-1.5 rounded bg-slate-100 overflow-hidden">
+                <div className="h-full rounded" style={{ width: `${r.aiProbability}%`, background: probColor(r.aiProbability) }} />
+              </div>
+              <span className="font-bold text-[11px]">{r.aiProbability}%</span>
+            </div>
+          </td>
+          {/* Inline status add */}
+          <td className="p-2">
+            <input
+              placeholder="Quick status update..."
+              className="w-full px-2 py-1 text-[11px] border border-slate-200 rounded bg-white hover:border-blue-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const input = e.target as HTMLInputElement;
+                  handleInlineStatus(r.id, input.value);
+                  input.value = '';
+                }
+              }}
+            />
+            {reqStatuses[0] && (
+              <div className="text-[9px] text-slate-400 mt-0.5 truncate max-w-[170px]" title={reqStatuses[0].status_text}>
+                {reqStatuses[0].status_date.slice(5)}: {reqStatuses[0].status_text}
+              </div>
+            )}
+          </td>
+          {/* Delete */}
+          <td className="p-1">
+            <button onClick={() => { if (confirm(`Delete "${r.requisition}"?`)) removeRequisition(r.id); }}
+              className="p-1 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors" title="Delete requisition">
+              <Trash2 size={12} />
+            </button>
+          </td>
+        </tr>
+
+        {/* Expanded status + audit history */}
+        {isExpanded && (
+          <tr key={`${r.id}-exp`}>
+            <td colSpan={17} className="bg-slate-50/80 p-0">
+              <div className="px-8 py-3 space-y-4">
+                {/* Status updates */}
+                <div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Status History</div>
+                  {reqStatuses.length === 0 && <p className="text-xs text-slate-400 italic">No status updates yet</p>}
+                  <div className="space-y-1.5">
+                    {reqStatuses.map(s => (
+                      <div key={s.id} className="flex items-start gap-3 text-xs group">
+                        <span className="text-slate-400 font-mono text-[10px] w-20 flex-shrink-0 pt-0.5">{s.status_date}</span>
+                        <span className="flex-1 text-slate-600">{s.status_text}</span>
+                        {s.anticipation && <span className="text-blue-500 text-[10px] italic flex-shrink-0">{'→'} {s.anticipation}</span>}
+                        <button onClick={() => { if (confirm('Delete this status?')) removeStatus(s.id); }}
+                          className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 transition-all flex-shrink-0" title="Delete status">
+                          <Trash2 size={10} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Detailed add */}
+                  <div className="mt-3 flex gap-2 items-end">
+                    <input type="date" className="px-2 py-1 text-[11px] border border-slate-200 rounded bg-white" defaultValue={new Date().toISOString().slice(0,10)} id={`date-${r.id}`} />
+                    <input placeholder="Status update..." className="flex-1 px-2 py-1 text-[11px] border border-slate-200 rounded bg-white" id={`text-${r.id}`} />
+                    <input placeholder="Anticipation..." className="w-40 px-2 py-1 text-[11px] border border-slate-200 rounded bg-white" id={`antic-${r.id}`} />
+                    <button onClick={() => {
+                      const dateEl = document.getElementById(`date-${r.id}`) as HTMLInputElement;
+                      const textEl = document.getElementById(`text-${r.id}`) as HTMLInputElement;
+                      const anticEl = document.getElementById(`antic-${r.id}`) as HTMLInputElement;
+                      if (textEl.value) {
+                        addStatus({ requisition_id: r.id, status_date: dateEl.value, status_text: textEl.value, anticipation: anticEl.value });
+                        textEl.value = ''; anticEl.value = '';
+                      }
+                    }} className="px-3 py-1 bg-primary text-white rounded text-[11px] font-semibold hover:bg-primary/90 flex-shrink-0">
+                      + Add
+                    </button>
+                  </div>
+                </div>
+
+                {/* Audit log */}
+                <div className="border-t border-slate-200 pt-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <History size={11} className="text-slate-400" />
+                    <div className="text-[10px] font-bold text-slate-400 uppercase">Field Audit Log ({rowHistory.length})</div>
+                  </div>
+                  {rowHistory.length === 0 && <p className="text-xs text-slate-400 italic">No field changes recorded yet</p>}
+                  <div className="space-y-1 max-h-60 overflow-y-auto">
+                    {rowHistory.map(h => (
+                      <div key={h.id} className="flex items-start gap-3 text-[11px] font-mono">
+                        <span className="text-slate-400 w-36 flex-shrink-0">{new Date(h.changed_at).toLocaleString()}</span>
+                        <span className="text-slate-700 font-semibold w-28 flex-shrink-0">{fieldLabel(h.field)}</span>
+                        <span className="text-rose-500 line-through flex-shrink-0 max-w-[160px] truncate" title={h.old_value}>{h.old_value || '∅'}</span>
+                        <span className="text-slate-400">→</span>
+                        <span className="text-emerald-600 flex-1 truncate" title={h.new_value}>{h.new_value || '∅'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </td>
+          </tr>
+        )}
+      </React.Fragment>
+    );
+  };
+
+  const TableHeader = () => (
+    <thead>
+      <tr className="border-b-2 border-slate-100">
+        <th className="w-6 p-2"></th>
+        <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Account</th>
+        <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Requisition</th>
+        <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Month</th>
+        <th className="text-center p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Pos</th>
+        <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Client SPOC</th>
+        <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Department</th>
+        <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Start Date</th>
+        <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Close Date</th>
+        <th className="text-center p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]" title="Days since Start Date">Ageing</th>
+        <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Status</th>
+        <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Stage</th>
+        <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Risk</th>
+        <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]" title="Manually set probability. Blank = use AI.">Prob</th>
+        <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]" title="Auto-calculated from status updates">AI Prob</th>
+        <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px] min-w-[180px]">Add Update</th>
+        <th className="w-8 p-2"></th>
+      </tr>
+    </thead>
+  );
 
   return (
     <>
@@ -313,7 +594,6 @@ export default function IndiaStaffingPage() {
                 <option value="__new__">+ Add New Account</option>
               </select>
             </div>
-            {/* New Account Name (conditional) */}
             {newReq.accountId === '__new__' && (
               <div className="space-y-1">
                 <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">New Account Name</label>
@@ -325,7 +605,6 @@ export default function IndiaStaffingPage() {
                 />
               </div>
             )}
-            {/* Title */}
             <div className="space-y-1">
               <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Requisition Title</label>
               <input
@@ -335,7 +614,6 @@ export default function IndiaStaffingPage() {
                 className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
             </div>
-            {/* Month */}
             <div className="space-y-1">
               <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Month</label>
               <select
@@ -346,7 +624,6 @@ export default function IndiaStaffingPage() {
                 {ALL_MONTHS.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
-            {/* Positions */}
             <div className="space-y-1">
               <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Positions</label>
               <input
@@ -356,9 +633,26 @@ export default function IndiaStaffingPage() {
                 className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
             </div>
-            {/* Expected Closure */}
             <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Expected Closure</label>
+              <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Start Date</label>
+              <input
+                type="date"
+                value={newReq.startDate}
+                onChange={(e) => setNewReq({ ...newReq, startDate: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Close Date</label>
+              <input
+                type="date"
+                value={newReq.closeByDate}
+                onChange={(e) => setNewReq({ ...newReq, closeByDate: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Expected Closure (text)</label>
               <input
                 value={newReq.expectedClosure}
                 onChange={(e) => setNewReq({ ...newReq, expectedClosure: e.target.value })}
@@ -366,7 +660,6 @@ export default function IndiaStaffingPage() {
                 className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
             </div>
-            {/* Client SPOC */}
             <div className="space-y-1">
               <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Client SPOC</label>
               <input
@@ -376,7 +669,6 @@ export default function IndiaStaffingPage() {
                 className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
             </div>
-            {/* Department */}
             <div className="space-y-1">
               <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Department</label>
               <input
@@ -416,188 +708,56 @@ export default function IndiaStaffingPage() {
       {activeTab === 'overview' && (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <StatCard label="Total Open Positions" value={totalPos} icon={<Users size={20} />} subtitle={`${filtered.length} requisitions`} />
+            <StatCard label="Total Open Positions" value={totalPos} icon={<Users size={20} />} subtitle={`${filtered.length} active requisitions`} />
             <StatCard label="Closed / Onboarding" value={closedCount} icon={<CheckCircle size={20} />} subtitle={`${closedRows.length} progressing`} />
             <StatCard label="High Risk" value={highRiskCount} icon={<AlertTriangle size={20} />} subtitle={`${filtered.filter((r) => r.risk === 'medium').length} medium`} />
-            <StatCard label="Avg Closure Prob" value={`${avgProb}%`} icon={<TrendingUp size={20} />} subtitle="AI-scored" />
+            <StatCard label="Avg Closure Prob" value={`${avgProb}%`} icon={<TrendingUp size={20} />} subtitle="AI + manual blend" />
           </div>
 
           <Card>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="font-bold text-sm">All Requisitions</h3>
-              <span className="text-[10px] text-blue-500 font-medium bg-blue-50 px-2 py-1 rounded-full">Click any cell to edit | Type in "Add Update" and press Enter</span>
+              <h3 className="font-bold text-sm">Active Requisitions</h3>
+              <span className="text-[10px] text-blue-500 font-medium bg-blue-50 px-2 py-1 rounded-full">Click any cell to edit | AI Prob auto-updates from status history</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b-2 border-slate-100">
-                    <th className="w-6 p-2"></th>
-                    <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Account</th>
-                    <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Requisition</th>
-                    <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Month</th>
-                    <th className="text-center p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Pos</th>
-                    <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Client SPOC</th>
-                    <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Department</th>
-                    <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Location</th>
-                    <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Status</th>
-                    <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Stage</th>
-                    <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Risk</th>
-                    <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Prob</th>
-                    <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Close By</th>
-                    <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px] min-w-[180px]">Add Update</th>
-                    <th className="w-8 p-2"></th>
-                  </tr>
-                </thead>
+                <TableHeader />
                 <tbody>
-                  {filtered.map((r) => {
-                    const isExpanded = expandedRows.has(r.id);
-                    const reqStatuses = statuses.filter(s => s.requisition_id === r.id).sort((a, b) => b.status_date.localeCompare(a.status_date));
-                    return (
-                      <React.Fragment key={r.id}>
-                        <tr className="border-b border-slate-50 hover:bg-slate-50/50">
-                          {/* Expand */}
-                          <td className="p-1 text-center">
-                            <button onClick={() => toggleRow(r.id)} className="p-0.5 rounded hover:bg-slate-100" title="Show status history">
-                              {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                            </button>
-                          </td>
-                          {/* Account */}
-                          <td className="p-2">
-                            <EditableCell value={r.account_id} type="select" options={accounts.map(a => a.id)}
-                              onSave={(val) => handleCellSave(r.id, 'account_id', val)}
-                              displayContent={<span className="font-bold">{r.account}</span>} />
-                          </td>
-                          {/* Requisition */}
-                          <td className="p-2">
-                            <EditableCell value={r.requisition} onSave={(val) => handleCellSave(r.id, 'title', val)} />
-                          </td>
-                          {/* Month */}
-                          <td className="p-2">
-                            <EditableCell value={r.month} type="select" options={ALL_MONTHS} onSave={(val) => handleCellSave(r.id, 'month', val)} />
-                          </td>
-                          {/* Positions */}
-                          <td className="p-2 text-center">
-                            <EditableCell value={r.newPositions} type="number" onSave={(val) => handleCellSave(r.id, 'new_positions', val)} className="justify-center" />
-                          </td>
-                          {/* Client SPOC */}
-                          <td className="p-2">
-                            <EditableCell value={r.clientSpoc} onSave={(val) => handleCellSave(r.id, 'client_spoc', val)} />
-                          </td>
-                          {/* Department */}
-                          <td className="p-2">
-                            <EditableCell value={r.department} onSave={(val) => handleCellSave(r.id, 'department', val)} />
-                          </td>
-                          {/* Location */}
-                          <td className="p-2">
-                            <EditableCell value={r.location} onSave={(val) => handleCellSave(r.id, 'location', val)} />
-                          </td>
-                          {/* Status */}
-                          <td className="p-2">
-                            <EditableCell value={r.statusField} type="select" options={STATUS_OPTIONS}
-                              onSave={(val) => handleCellSave(r.id, 'status_field', val)}
-                              displayContent={<span className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white" style={{ background: STATUS_COLORS[r.statusField] || '#94a3b8' }}>{r.statusField}</span>} />
-                          </td>
-                          {/* Stage */}
-                          <td className="p-2">
-                            <EditableCell value={r.stage} type="select" options={PIPELINE_STAGES}
-                              onSave={(val) => handleCellSave(r.id, 'stage', val)}
-                              displayContent={<span className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white" style={{ background: STAGE_COLORS[r.stage] }}>{r.stage}</span>} />
-                          </td>
-                          {/* Risk */}
-                          <td className="p-2">
-                            <StatusBadge status={r.risk === 'high' ? 'at-risk' : r.risk === 'medium' ? 'caution' : 'on-track'} label={r.risk} />
-                          </td>
-                          {/* Prob */}
-                          <td className="p-2">
-                            <div className="flex items-center gap-1.5">
-                              <div className="w-10 h-1.5 rounded bg-slate-100 overflow-hidden">
-                                <div className="h-full rounded" style={{ width: `${r.closureProb}%`, background: probColor(r.closureProb) }} />
-                              </div>
-                              <span className="font-bold">{r.closureProb}%</span>
-                            </div>
-                          </td>
-                          {/* Close By */}
-                          <td className="p-2">
-                            <input type="date" value={r.closeByDate}
-                              className="px-1 py-0.5 text-[11px] border border-slate-200 rounded bg-white hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-400 w-[120px]"
-                              onChange={(e) => handleCellSave(r.id, 'close_by_date', e.target.value)} />
-                            {r.expectedClosure && <div className="text-[9px] text-slate-400 italic mt-0.5">{r.expectedClosure}</div>}
-                          </td>
-                          {/* Inline status add */}
-                          <td className="p-2">
-                            <input
-                              placeholder="Quick status update..."
-                              className="w-full px-2 py-1 text-[11px] border border-slate-200 rounded bg-white hover:border-blue-300 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  const input = e.target as HTMLInputElement;
-                                  handleInlineStatus(r.id, input.value);
-                                  input.value = '';
-                                }
-                              }}
-                            />
-                            {reqStatuses[0] && (
-                              <div className="text-[9px] text-slate-400 mt-0.5 truncate max-w-[170px]" title={reqStatuses[0].status_text}>
-                                {reqStatuses[0].status_date.slice(5)}: {reqStatuses[0].status_text}
-                              </div>
-                            )}
-                          </td>
-                          {/* Delete */}
-                          <td className="p-1">
-                            <button onClick={() => { if (confirm(`Delete "${r.requisition}"?`)) removeRequisition(r.id); }}
-                              className="p-1 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors" title="Delete requisition">
-                              <Trash2 size={12} />
-                            </button>
-                          </td>
-                        </tr>
-
-                        {/* Expanded status history */}
-                        {isExpanded && (
-                          <tr key={`${r.id}-exp`}>
-                            <td colSpan={15} className="bg-slate-50/80 p-0">
-                              <div className="px-8 py-3">
-                                <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Status History</div>
-                                {reqStatuses.length === 0 && <p className="text-xs text-slate-400 italic">No status updates yet</p>}
-                                <div className="space-y-1.5">
-                                  {reqStatuses.map(s => (
-                                    <div key={s.id} className="flex items-start gap-3 text-xs group">
-                                      <span className="text-slate-400 font-mono text-[10px] w-20 flex-shrink-0 pt-0.5">{s.status_date}</span>
-                                      <span className="flex-1 text-slate-600">{s.status_text}</span>
-                                      {s.anticipation && <span className="text-blue-500 text-[10px] italic flex-shrink-0">{'→'} {s.anticipation}</span>}
-                                      <button onClick={() => { if (confirm('Delete this status?')) removeStatus(s.id); }}
-                                        className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 transition-all flex-shrink-0" title="Delete status">
-                                        <Trash2 size={10} />
-                                      </button>
-                                    </div>
-                                  ))}
-                                </div>
-                                {/* Detailed add */}
-                                <div className="mt-3 flex gap-2 items-end">
-                                  <input type="date" className="px-2 py-1 text-[11px] border border-slate-200 rounded bg-white" defaultValue={new Date().toISOString().slice(0,10)} id={`date-${r.id}`} />
-                                  <input placeholder="Status update..." className="flex-1 px-2 py-1 text-[11px] border border-slate-200 rounded bg-white" id={`text-${r.id}`} />
-                                  <input placeholder="Anticipation..." className="w-40 px-2 py-1 text-[11px] border border-slate-200 rounded bg-white" id={`antic-${r.id}`} />
-                                  <button onClick={() => {
-                                    const dateEl = document.getElementById(`date-${r.id}`) as HTMLInputElement;
-                                    const textEl = document.getElementById(`text-${r.id}`) as HTMLInputElement;
-                                    const anticEl = document.getElementById(`antic-${r.id}`) as HTMLInputElement;
-                                    if (textEl.value) {
-                                      addStatus({ requisition_id: r.id, status_date: dateEl.value, status_text: textEl.value, anticipation: anticEl.value });
-                                      textEl.value = ''; anticEl.value = '';
-                                    }
-                                  }} className="px-3 py-1 bg-primary text-white rounded text-[11px] font-semibold hover:bg-primary/90 flex-shrink-0">
-                                    + Add
-                                  </button>
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
+                  {filtered.map((r) => renderRow(r))}
                 </tbody>
               </table>
             </div>
+          </Card>
+
+          {/* Archived (Closed / Lost / Cancelled) — collapsible */}
+          <Card className="mt-6">
+            <button
+              onClick={() => setShowArchive((v) => !v)}
+              className="w-full flex items-center justify-between text-left"
+            >
+              <div className="flex items-center gap-2">
+                <Archive size={14} className="text-slate-400" />
+                <h3 className="font-bold text-sm">Archived Requisitions</h3>
+                <span className="text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                  {archivedRows.length} — Closed / Lost / Cancelled
+                </span>
+              </div>
+              {showArchive ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronRight size={16} className="text-slate-400" />}
+            </button>
+            {showArchive && (
+              <div className="overflow-x-auto mt-4">
+                {archivedRows.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic py-4 text-center">No archived requisitions yet</p>
+                ) : (
+                  <table className="w-full text-xs">
+                    <TableHeader />
+                    <tbody>
+                      {archivedRows.map((r) => renderRow(r, { archived: true }))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
           </Card>
         </>
       )}
@@ -631,16 +791,18 @@ export default function IndiaStaffingPage() {
               <h3 className="font-bold text-sm mb-3">{selectedAccount} -- Requisition Breakdown</h3>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
-                  <thead><tr className="border-b-2 border-slate-100"><th className="text-left p-2 text-slate-400 font-bold uppercase text-[10px]">Requisition</th><th className="p-2">Month</th><th className="p-2">Pos</th><th className="p-2">Stage</th><th className="p-2">Risk</th><th className="p-2">Prob</th><th className="p-2">Status</th></tr></thead>
+                  <thead><tr className="border-b-2 border-slate-100"><th className="text-left p-2 text-slate-400 font-bold uppercase text-[10px]">Requisition</th><th className="p-2">Month</th><th className="p-2">Pos</th><th className="p-2">Ageing</th><th className="p-2">Stage</th><th className="p-2">Risk</th><th className="p-2">Prob</th><th className="p-2">AI Prob</th><th className="p-2">Status</th></tr></thead>
                   <tbody>
                     {(accountGroups.get(selectedAccount) || []).map((r) => (
                       <tr key={r.id} className="border-b border-slate-50">
                         <td className="p-2 font-semibold">{r.requisition}</td>
                         <td className="p-2">{r.month}</td>
                         <td className="p-2 text-center font-bold">{r.newPositions}</td>
+                        <td className="p-2 text-center">{r.startDate ? `${r.ageing}d` : '—'}</td>
                         <td className="p-2"><span className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white" style={{ background: STAGE_COLORS[r.stage] }}>{r.stage}</span></td>
                         <td className="p-2"><StatusBadge status={r.risk === 'high' ? 'at-risk' : r.risk === 'medium' ? 'caution' : 'on-track'} label={r.risk} /></td>
-                        <td className="p-2 font-bold">{r.closureProb}%</td>
+                        <td className="p-2 font-bold">{r.probability > 0 ? `${r.probability}%` : '—'}</td>
+                        <td className="p-2 font-bold">{r.aiProbability}%</td>
                         <td className="p-2 text-slate-500 text-[11px] max-w-sm truncate">{r.status.split('\n')[0]}</td>
                       </tr>
                     ))}
@@ -660,7 +822,7 @@ export default function IndiaStaffingPage() {
               <h2 className="font-bold text-base">AI-Powered Closure Forecast</h2>
               <span className="bg-gradient-to-r from-violet-500 to-blue-500 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide">AI Insights</span>
             </div>
-            <p className="text-slate-400 text-xs mb-5">Based on status velocity, sentiment analysis, and pipeline stage</p>
+            <p className="text-slate-400 text-xs mb-5">Based on status velocity, sentiment analysis, and pipeline stage (manual Prob overrides AI when set)</p>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               {[
                 { label: 'Optimistic', val: optimistic, color: '#10b981', conf: 40 },
@@ -681,7 +843,7 @@ export default function IndiaStaffingPage() {
             <h3 className="font-bold text-sm mb-3">Forecast Reasoning by Requisition</h3>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
-                <thead><tr className="border-b-2 border-slate-100"><th className="text-left p-2 text-slate-400 font-bold uppercase text-[10px]">Account</th><th className="p-2">Requisition</th><th className="p-2">Stage</th><th className="p-2">Prob</th><th className="p-2">Risk</th><th className="p-2">Recommendation</th></tr></thead>
+                <thead><tr className="border-b-2 border-slate-100"><th className="text-left p-2 text-slate-400 font-bold uppercase text-[10px]">Account</th><th className="p-2">Requisition</th><th className="p-2">Stage</th><th className="p-2">Ageing</th><th className="p-2">Prob</th><th className="p-2">Risk</th><th className="p-2">Recommendation</th></tr></thead>
                 <tbody>
                   {[...filtered].sort((a, b) => b.closureProb - a.closureProb).map((r) => {
                     let rec = 'Monitor';
@@ -693,6 +855,7 @@ export default function IndiaStaffingPage() {
                       <tr key={r.id} className="border-b border-slate-50">
                         <td className="p-2 font-bold">{r.account}</td><td className="p-2">{r.requisition}</td>
                         <td className="p-2"><span className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white" style={{ background: STAGE_COLORS[r.stage] }}>{r.stage}</span></td>
+                        <td className="p-2 text-center">{r.startDate ? `${r.ageing}d` : '—'}</td>
                         <td className="p-2 font-bold">{r.closureProb}%</td>
                         <td className="p-2"><StatusBadge status={r.risk === 'high' ? 'at-risk' : r.risk === 'medium' ? 'caution' : 'on-track'} label={r.risk} /></td>
                         <td className="p-2 text-slate-500">{rec}</td>
