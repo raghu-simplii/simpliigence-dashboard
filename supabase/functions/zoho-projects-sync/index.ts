@@ -48,6 +48,24 @@ const corsHeaders = {
 
 const SKIP_STATUSES = new Set(['Completed', 'On Hold']);
 
+/**
+ * Default forecastName overrides — short names used in the Forecast spreadsheet.
+ * Keyed by Zoho project id (string form).
+ *
+ * These are DEFAULTS only. The client-side store preserves any user-set
+ * forecastName across syncs, so if someone edits these in the UI that wins.
+ *
+ * Without these, cost = forecasted hours × rate card doesn't compute for
+ * these projects, because Zoho's full name doesn't match the short name the
+ * spreadsheet uses.
+ */
+const FORECAST_NAME_ALIASES: Record<string, string> = {
+  '204610000003130003': 'QUData',    // QuData Centres
+  '204610000002779003': 'Matheson',  // Matheson Constructors
+  '204610000002746053': 'CoolAir',   // Cool Air
+  '204610000002290021': 'LLI',       // Llyods List Intelligence
+};
+
 // ── Types minimally describing what we use from Zoho responses ──
 interface ZohoOwner { first_name?: string; last_name?: string; full_name?: string; name?: string; email?: string }
 interface ZohoStatus { name?: string; is_closed?: boolean }
@@ -170,6 +188,7 @@ Deno.serve(async (req: Request) => {
         // Swallow per-project phase errors so one bad project doesn't fail the whole sync.
         console.warn(`phases for project ${p.id} failed:`, (e as Error).message);
       }
+      const forecastAlias = FORECAST_NAME_ALIASES[String(p.id)];
       return {
         id: `zoho-${p.id}`,
         zohoId: String(p.id),
@@ -179,6 +198,7 @@ Deno.serve(async (req: Request) => {
         startDate: p.start_date ?? null,
         endDate: p.end_date ?? null,
         source: 'zoho' as const,
+        ...(forecastAlias ? { forecastName: forecastAlias } : {}),
         resources: [],
         phases,
       };

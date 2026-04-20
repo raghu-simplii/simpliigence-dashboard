@@ -52,12 +52,20 @@ export const usePipelineStore = create<PipelineState>()(
           const existingZoho = new Map(
             s.projects.filter((p) => p.source === 'zoho').map((p) => [p.zohoId, p]),
           );
+          // Preserve user-set fields across syncs — the Zoho API doesn't know about
+          // these, so a naive replace would wipe them every time someone clicks Sync.
+          // Precedence: user value > incoming default > undefined.
           const merged = zohoProjects.map((zp) => {
             const existing = existingZoho.get(zp.zohoId);
-            if (existing && existing.resources.length > 0) {
-              return { ...zp, resources: existing.resources };
-            }
-            return zp;
+            if (!existing) return zp;
+            return {
+              ...zp,
+              forecastName: existing.forecastName ?? zp.forecastName,
+              resources: existing.resources && existing.resources.length > 0 ? existing.resources : zp.resources,
+              goLiveDate: existing.goLiveDate ?? zp.goLiveDate,
+              revenue: existing.revenue ?? zp.revenue,
+              revenueCurrency: existing.revenueCurrency ?? zp.revenueCurrency,
+            };
           });
           return {
             projects: [...manual, ...merged],
