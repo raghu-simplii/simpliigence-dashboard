@@ -16,6 +16,12 @@
  */
 import Anthropic from '@anthropic-ai/sdk';
 import type { ForecastAssignment, Month } from '../types/forecast';
+import type {
+  HiringGapRow,
+  RoleCategory,
+  ScenarioSettings,
+  StaffingRequest,
+} from '../types/hiringForecast';
 import { deriveEmployeeSummaries, deriveProjectSummaries } from './parseSpreadsheet';
 import type { QueryResult } from './queryEngine';
 
@@ -37,6 +43,13 @@ export function setClaudeApiKey(key: string): void {
 }
 
 /* ── Shape of the data context we hand to Claude ─────────────────────── */
+
+/** Data from the Hiring Forecast tab — demand, capacity, and gap per month × role. */
+export interface HiringForecastInput {
+  gapRows: HiringGapRow[];
+  scenario: ScenarioSettings;
+  staffingRequests: StaffingRequest[];
+}
 
 interface DataContext {
   meta: {
@@ -62,9 +75,38 @@ interface DataContext {
     totalHours: number;
     loadedCostUSD: number;
   }>;
+  hiringForecast: {
+    scenario: {
+      targetUtilization: number;
+      effectiveCapacityPerPersonPerMonth: number;
+      forecastStartMonth: Month;
+      forecastEndMonth: Month;
+    };
+    currentHeadcount: Record<RoleCategory, number>;
+    /** One entry per (month × role) within the scenario window. */
+    gapRows: Array<{
+      month: Month;
+      role: RoleCategory;
+      totalDemandHours: number;
+      totalCapacityHours: number;
+      gapHours: number;
+      hiresNeeded: number;
+    }>;
+    /** Manual staffing requests (one-off demand captured on the Hiring Forecast tab) */
+    staffingRequests: Array<{
+      clientName: string;
+      role: RoleCategory;
+      hoursPerMonth: number;
+      startMonth: Month;
+      endMonth: Month;
+    }>;
+  };
 }
 
-function buildDataContext(assignments: ForecastAssignment[]): DataContext {
+function buildDataContext(
+  assignments: ForecastAssignment[],
+  hiring: HiringForecastInput,
+): DataContext {
   const employees = deriveEmployeeSummaries(assignments);
   const projects = deriveProjectSummaries(assignments);
   const roundRecord = (r: Record<Month, number>): Record<Month, number> =>
@@ -72,6 +114,15 @@ function buildDataContext(assignments: ForecastAssignment[]): DataContext {
       acc[m] = Math.round(r[m] || 0);
       return acc;
     }, {} as Record<Month, number>);
+
+  // currentHeadcount and effectiveCapacityPerPerson are constant across gap rows,
+  // so we can pluck them from any row per role.
+  const currentHeadcount: Record<RoleCategory, number> = { BA: 0, JuniorDev: 0, SeniorDev: 0 };
+  let effectiveCapPerPerson = 160 * (hiring.scenario.targetUtilization / 100);
+  for (const r of hiring.gapRows) {
+    currentHeadcount[r.roleCategory] = r.currentHeadcount;
+    effectiveCapPerPerson = r.effectiveCapacityPerPerson;
+  }
 
   return {
     meta: {
@@ -97,6 +148,30 @@ function buildDataContext(assignments: ForecastAssignment[]): DataContext {
       totalHours: Math.round(p.totalHours),
       loadedCostUSD: Math.round(p.loadedCost),
     })),
+    hiringForecast: {
+      scenario: {
+        targetUtilization: hiring.scenario.targetUtilization,
+        effectiveCapacityPerPersonPerMonth: Math.round(effectiveCapPerPerson),
+        forecastStartMonth: hiring.scenario.forecastStartMonth,
+        forecastEndMonth: hiring.scenario.forecastEndMonth,
+      },
+      currentHeadcount,
+      gapRows: hiring.gapRows.map((r) => ({
+        month: r.month,
+        role: r.roleCategory,
+        totalDemandHours: Math.round(r.totalDemand),
+        totalCapacityHours: Math.round(r.totalCapacity),
+        gapHours: Math.round(r.gap),
+        hiresNeeded: r.hiresNeeded,
+      })),
+      staffingRequests: hiring.staffingRequests.map((r) => ({
+        clientName: r.clientName,
+        role: r.roleCategory,
+        hoursPerMonth: r.hoursPerMonth,
+        startMonth: r.startMonth,
+        endMonth: r.endMonth,
+      })),
+    },
   };
 }
 
@@ -104,30 +179,47 @@ function buildDataContext(assignments: ForecastAssignment[]): DataContext {
 
 const SYSTEM_PROMPT = `You are a data analytics assistant for Simpliigence's resource management dashboard.
 
-You answer questions about a team's forecasted hours, by employee, by project, by month. Your only source of truth is the JSON data provided in this message. Do not use outside knowledge.
+You answer questions about the team's forecasted hours, project allocation, and hiring needs. Your only source of truth is the JSON data provided in this message. Do not use outside knowledge.
 
 Accuracy rules (non-negotiable):
-- Compute every number by actually summing the monthly values in the data. Do not estimate.
+- Compute every number by actually summing values in the data. Do not estimate.
 - If the answer cannot be derived from the data, say exactly that — never invent employee names, project names, roles, or numbers.
-- If the question is about India Staffing, Zoho project status, financials, or anything other than forecasted hours and loaded cost, reply that the Smart Query currently sees only the forecast/team data.
+- If the question is about India Staffing, Zoho project status, or general financials beyond the fields described below, reply that the Smart Query currently doesn't see that tab's data.
 
-Domain rules:
-- Full-time capacity = 160 hours/month per person (the meta.capacityHoursPerMonth field).
-- Utilization % = (actual hours in period) / (160 × number of months in period) × 100.
-- Loaded cost is pre-computed per project in USD in the field "loadedCostUSD". Project cost = sum of (employee hours on project × rateCardUSDPerHour). If a question mixes projects, sum the pre-computed loadedCostUSD values.
-- Quarters: Q1=Jan–Mar, Q2=Apr–Jun, Q3=Jul–Sep, Q4=Oct–Dec. "H1" = Jan–Jun.
+The data object has these top-level sections:
+- meta: year, capacity per person per month (160 hours), totals.
+- employees: per-person forecast (role, rate, monthlyHours Jan..Dec, totalHours, projects).
+- projects: per-project forecast (teamSize, monthlyHours, totalHours, loadedCostUSD).
+- hiringForecast: the Hiring Forecast tab — demand vs capacity per month × role, with hires needed.
+
+How to answer HIRING / CAPACITY-GAP questions (use hiringForecast.gapRows):
+- The field "hiresNeeded" on each gap row is the per-month, per-role number of FTEs to hire to close that month's gap. Demand fluctuates month-to-month.
+- To answer "how many X to hire in period P": take MAX(hiresNeeded) over months in P for each relevant role, then sum those maxes across roles. (You don't un-hire someone once a peak month passes, so the peak drives the hiring plan.)
+- "Developers" = JuniorDev + SeniorDev. "BAs" = BA only.
+- Quarters: Q1=Jan–Mar, Q2=Apr–Jun, Q3=Jul–Sep, Q4=Oct–Dec. H1=Jan–Jun.
+- Always mention which months drove the peak, and the current headcount baseline from hiringForecast.currentHeadcount.
+- If all gapHours across the period are ≤ 0 for a role, the answer is 0 hires (current team has headroom).
+- hiringForecast.scenario.targetUtilization and effectiveCapacityPerPersonPerMonth control the model — mention the scenario assumption if it's unusual (e.g. 80% target utilization means each person contributes 128 effective hours/month, not 160).
+
+How to answer UTILIZATION questions:
+- Utilization % for a person in period P = (hours they worked in P) / (160 × number of months in P) × 100.
+- Utilization % for the team in P = sum of all person-hours in P / (160 × team size × number of months in P) × 100.
+
+How to answer COST questions:
+- Loaded cost is pre-computed per project in USD in projects[].loadedCostUSD. For a question spanning multiple projects, sum those values.
+- Per-employee cost for period P = sum over months of (monthlyHours[m] × rateCardUSDPerHour). If rateCardUSDPerHour is null, exclude that person's hours from the cost number and call that out in the answer.
 
 Output format — ALWAYS reply with a single JSON object matching this exact schema, and nothing else (no prose before or after, no markdown fences):
 
 {
-  "answer": "<markdown-formatted text, under 200 words. Use **bold** for key numbers and names. Use '- ' bullets for lists.>",
+  "answer": "<markdown text, under 200 words. Use **bold** for key numbers and names. Use '- ' bullets for lists.>",
   "table": null | {
     "columns": ["<col header>", ...],
     "rows": [{"<col header>": <cell value>, ...}, ...]
   }
 }
 
-Return a table when you're listing/comparing multiple rows (people, projects, months); return null for single-number answers. Every row object must use the exact strings from "columns" as its keys.`;
+Return a table when listing/comparing multiple rows (people, projects, months, roles); return null for single-number answers. Every row object must use the exact strings from "columns" as its keys.`;
 
 /* ── Client singleton (recreated when API key changes) ───────────────── */
 
@@ -206,13 +298,14 @@ function parseClaudeJson(text: string): ParsedResponse | null {
 export async function runClaudeQuery(
   query: string,
   assignments: ForecastAssignment[],
+  hiring: HiringForecastInput,
 ): Promise<QueryResult> {
   const client = getClient();
   if (!client) {
     return { answer: 'Claude API key not configured. Go to Settings to add your Anthropic API key.' };
   }
 
-  const dataContext = buildDataContext(assignments);
+  const dataContext = buildDataContext(assignments, hiring);
   const dataJson = JSON.stringify(dataContext);
 
   try {

@@ -1,14 +1,17 @@
 import { useMemo, useState, useRef, useCallback } from 'react';
 import { Users, FolderKanban, Clock, DollarSign, Search, Sparkles, X, Loader2 } from 'lucide-react';
-import { useForecastStore } from '../store';
+import { useForecastStore, useHiringForecastStore, usePipelineStore } from '../store';
 import { StatCard, Card } from '../components/ui';
 import { PageHeader } from '../components/shared/PageHeader';
 import { deriveEmployeeSummaries, deriveProjectSummaries } from '../lib/parseSpreadsheet';
 import { runQuery, SUGGESTED_QUERIES } from '../lib/queryEngine';
 import type { QueryResult } from '../lib/queryEngine';
 import { runClaudeQuery, getClaudeApiKey } from '../lib/claudeQuery';
+import type { HiringForecastInput } from '../lib/claudeQuery';
+import { computeHiringForecast } from '../lib/hiringForecastCalc';
 import { MONTHS } from '../types/forecast';
-import type { ForecastAssignment } from '../types/forecast';
+import type { ForecastAssignment, Month } from '../types/forecast';
+import type { PipelineProject } from '../types/hiringForecast';
 import { CHART_COLORS } from '../constants/brand';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -18,7 +21,13 @@ import {
 const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#ec4899', '#14b8a6', '#a855f7'];
 
 /* ── Smart Query Panel ─────────────────────────────── */
-function SmartQueryPanel({ assignments }: { assignments: ForecastAssignment[] }) {
+function SmartQueryPanel({
+  assignments,
+  hiringForecast,
+}: {
+  assignments: ForecastAssignment[];
+  hiringForecast: HiringForecastInput;
+}) {
   const [query, setQuery] = useState('');
   const [result, setResult] = useState<QueryResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -34,7 +43,7 @@ function SmartQueryPanel({ assignments }: { assignments: ForecastAssignment[] })
       setLoading(true);
       setResult(null);
       try {
-        const res = await runClaudeQuery(text, assignments);
+        const res = await runClaudeQuery(text, assignments, hiringForecast);
         setResult(res);
       } finally {
         setLoading(false);
@@ -42,7 +51,7 @@ function SmartQueryPanel({ assignments }: { assignments: ForecastAssignment[] })
     } else {
       setResult(runQuery(text, assignments as any));
     }
-  }, [query, assignments]);
+  }, [query, assignments, hiringForecast]);
 
   const handleClear = () => {
     setQuery('');
@@ -175,9 +184,45 @@ function SmartQueryPanel({ assignments }: { assignments: ForecastAssignment[] })
 
 export default function DashboardPage() {
   const assignments = useForecastStore((s) => s.assignments);
+  const staffingRequests = useHiringForecastStore((s) => s.staffingRequests);
+  const scenarioSettings = useHiringForecastStore((s) => s.scenarioSettings);
+  const pipelineStoreProjects = usePipelineStore((s) => s.projects);
 
   const employees = useMemo(() => deriveEmployeeSummaries(assignments), [assignments]);
   const projects = useMemo(() => deriveProjectSummaries(assignments), [assignments]);
+
+  // Same conversion as the Hiring Forecast tab — keep Smart Query in sync with what that tab computes.
+  const pipelineProjects: PipelineProject[] = useMemo(() => {
+    return pipelineStoreProjects
+      .filter((p) => p.source === 'manual')
+      .map((zp) => {
+        const startMonth: Month = zp.startDate ? MONTHS[new Date(zp.startDate).getMonth()] : 'Jan';
+        const endMonth: Month = zp.endDate ? MONTHS[new Date(zp.endDate).getMonth()] : 'Dec';
+        const headcount = { BA: 0, JuniorDev: 0, SeniorDev: 0 } as Record<'BA' | 'JuniorDev' | 'SeniorDev', number>;
+        let hoursPerPerson = 160;
+        for (const r of zp.resources) {
+          if (r.roleCategory === 'BA' || r.roleCategory === 'JuniorDev' || r.roleCategory === 'SeniorDev') {
+            headcount[r.roleCategory] = r.count;
+            hoursPerPerson = r.hoursPerMonth || 160;
+          }
+        }
+        return {
+          id: zp.id,
+          projectName: zp.name,
+          startMonth,
+          endMonth,
+          headcount,
+          hoursPerPerson,
+          source: 'manual' as const,
+        };
+      });
+  }, [pipelineStoreProjects]);
+
+  const hiringForecast: HiringForecastInput = useMemo(() => ({
+    gapRows: computeHiringForecast(assignments, staffingRequests, pipelineProjects, scenarioSettings),
+    scenario: scenarioSettings,
+    staffingRequests,
+  }), [assignments, staffingRequests, pipelineProjects, scenarioSettings]);
 
   const totalEmployees = employees.length;
   const totalProjects = projects.length;
@@ -225,7 +270,7 @@ export default function DashboardPage() {
     <>
       <PageHeader title="Command Center" subtitle={`Resource forecasting overview — ${MONTHS[0]} to ${MONTHS[MONTHS.length - 1]} ${new Date().getFullYear()}`} />
 
-      <SmartQueryPanel assignments={assignments} />
+      <SmartQueryPanel assignments={assignments} hiringForecast={hiringForecast} />
 
       <div className="grid grid-cols-4 gap-4 mb-6">
         <StatCard icon={<Users size={24} />} label="Team Size" value={totalEmployees} />
