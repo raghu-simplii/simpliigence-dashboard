@@ -211,7 +211,11 @@ export default function USStaffingPage() {
   /* —— Render grouped by account —— */
   const renderAccountGroup = (acctList: typeof accounts, categoryLabel: string) => {
     const groupReqs = filteredReqs.filter(r => acctList.some(a => a.id === r.account_id));
-    if (groupReqs.length === 0 && activeTab !== 'all' && activeTab !== 'overview') return null;
+    // Only show accounts that actually have requisitions matching the current filter.
+    // Empty accounts are managed from the Overview tab (see MSP/SI summary cards),
+    // which keeps this browsing view focused on real work.
+    const populatedAccounts = acctList.filter(a => filteredReqs.some(r => r.account_id === a.id));
+    if (populatedAccounts.length === 0) return null;
 
     return (
       <div className="mb-6">
@@ -219,7 +223,7 @@ export default function USStaffingPage() {
           <Building2 size={16} /> {categoryLabel}
           <span className="text-xs font-normal text-slate-400">({groupReqs.length} requisitions)</span>
         </h3>
-        {acctList.map(acct => {
+        {populatedAccounts.map(acct => {
           const acctReqs = filteredReqs.filter(r => r.account_id === acct.id);
           const isExpanded = expandedAccounts.has(acct.id);
 
@@ -339,74 +343,67 @@ export default function USStaffingPage() {
 
       {/* Account Summary */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card>
-          <div className="p-4">
-            <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
-              <Building2 size={16} /> MSP Accounts
-            </h3>
-            {mspAccounts.map(a => {
-              const count = requisitions.filter(r => r.account_id === a.id).length;
-              if (count === 0) return null;
-              return (
-                <div key={a.id} className="flex items-center justify-between py-1.5 border-b border-slate-50 last:border-0 group/row">
-                  <span className="text-xs text-slate-700">{a.name}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-slate-500">{count} roles</span>
-                    <button
-                      onClick={() => {
-                        if (confirm(`Delete "${a.name}" and all its ${count} requisitions?`)) {
-                          requisitions.filter(r => r.account_id === a.id).forEach(r => removeRequisition(r.id));
-                          removeAccount(a.id);
-                        }
-                      }}
-                      className="p-0.5 text-red-400 hover:text-red-600 opacity-0 group-hover/row:opacity-100 transition-opacity"
-                      title="Delete account"
+        {(['MSP', 'SI'] as const).map((category) => {
+          const acctList = category === 'MSP' ? mspAccounts : siAccounts;
+          const Icon = category === 'MSP' ? Building2 : Globe;
+          const sorted = [...acctList].sort((a, b) => {
+            const aCount = requisitions.filter(r => r.account_id === a.id).length;
+            const bCount = requisitions.filter(r => r.account_id === b.id).length;
+            // Populated first (desc), then empty alphabetical.
+            if ((aCount > 0) !== (bCount > 0)) return bCount - aCount;
+            if (aCount !== bCount) return bCount - aCount;
+            return a.name.localeCompare(b.name);
+          });
+          return (
+            <Card key={category}>
+              <div className="p-4">
+                <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                  <Icon size={16} /> {category} Accounts
+                  <span className="text-xs font-normal text-slate-400">({acctList.length})</span>
+                </h3>
+                {sorted.length === 0 && (
+                  <p className="text-xs text-slate-400 italic">No {category} accounts yet</p>
+                )}
+                {sorted.map(a => {
+                  const count = requisitions.filter(r => r.account_id === a.id).length;
+                  const isEmpty = count === 0;
+                  return (
+                    <div
+                      key={a.id}
+                      className={`flex items-center justify-between py-1.5 border-b border-slate-50 last:border-0 group/row ${isEmpty ? 'opacity-60' : ''}`}
                     >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-            {mspAccounts.every(a => requisitions.filter(r => r.account_id === a.id).length === 0) && (
-              <p className="text-xs text-slate-400 italic">No active MSP accounts</p>
-            )}
-          </div>
-        </Card>
-        <Card>
-          <div className="p-4">
-            <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
-              <Globe size={16} /> SI Accounts
-            </h3>
-            {siAccounts.map(a => {
-              const count = requisitions.filter(r => r.account_id === a.id).length;
-              if (count === 0) return null;
-              return (
-                <div key={a.id} className="flex items-center justify-between py-1.5 border-b border-slate-50 last:border-0 group/row">
-                  <span className="text-xs text-slate-700">{a.name}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-slate-500">{count} roles</span>
-                    <button
-                      onClick={() => {
-                        if (confirm(`Delete "${a.name}" and all its ${count} requisitions?`)) {
-                          requisitions.filter(r => r.account_id === a.id).forEach(r => removeRequisition(r.id));
-                          removeAccount(a.id);
-                        }
-                      }}
-                      className="p-0.5 text-red-400 hover:text-red-600 opacity-0 group-hover/row:opacity-100 transition-opacity"
-                      title="Delete account"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-            {siAccounts.every(a => requisitions.filter(r => r.account_id === a.id).length === 0) && (
-              <p className="text-xs text-slate-400 italic">No active SI accounts</p>
-            )}
-          </div>
-        </Card>
+                      <span className="text-xs text-slate-700">{a.name}</span>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs font-semibold ${isEmpty ? 'text-slate-400 italic' : 'text-slate-500'}`}>
+                          {count} {count === 1 ? 'role' : 'roles'}
+                        </span>
+                        <button
+                          onClick={() => {
+                            const msg = isEmpty
+                              ? `Delete empty account "${a.name}"?`
+                              : `Delete "${a.name}" and all its ${count} requisitions?`;
+                            if (confirm(msg)) {
+                              if (!isEmpty) {
+                                requisitions.filter(r => r.account_id === a.id).forEach(r => removeRequisition(r.id));
+                              }
+                              removeAccount(a.id);
+                            }
+                          }}
+                          className={`p-0.5 text-red-400 hover:text-red-600 transition-opacity ${
+                            isEmpty ? 'opacity-70 hover:opacity-100' : 'opacity-0 group-hover/row:opacity-100'
+                          }`}
+                          title={isEmpty ? 'Delete empty account' : 'Delete account'}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );
