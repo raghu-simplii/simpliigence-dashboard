@@ -394,10 +394,32 @@ export default function ProjectPipelinePage() {
   const assignments = useForecastStore((s) => s.assignments);
   const allProjects = usePipelineStore((s) => s.projects);
   const updateProject = usePipelineStore((s) => s.updateProject);
-  const setZohoProjects = usePipelineStore((s) => s.setZohoProjects);
+  const syncFromZoho = usePipelineStore((s) => s.syncFromZoho);
   const lastSync = usePipelineStore((s) => s.lastZohoSync);
   const cadToUsdRate = useFinancialStore((s) => s.settings.cadToUsdRate) || 0.73;
   const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    setSyncMsg(null);
+    try {
+      const result = await syncFromZoho(ZOHO_SEED_PROJECTS);
+      if (result.ok) {
+        setSyncMsg(`✓ Synced ${result.count} active projects from Zoho`);
+      } else {
+        setSyncMsg(
+          result.source === 'fallback'
+            ? `⚠ Live sync unavailable — loaded ${result.count ?? 0} projects from cached snapshot. (${result.error})`
+            : `✗ Sync failed: ${result.error}`,
+        );
+      }
+    } finally {
+      setSyncing(false);
+      // Clear the message after 6 seconds
+      setTimeout(() => setSyncMsg(null), 6000);
+    }
+  };
 
   // Current projects = Zoho-sourced only
   const currentProjects = useMemo(() => allProjects.filter((p) => p.source === 'zoho'), [allProjects]);
@@ -427,13 +449,7 @@ export default function ProjectPipelinePage() {
               </span>
             )}
             <button
-              onClick={() => {
-                setSyncing(true);
-                setTimeout(() => {
-                  setZohoProjects(ZOHO_SEED_PROJECTS);
-                  setSyncing(false);
-                }, 500);
-              }}
+              onClick={handleSync}
               disabled={syncing}
               className="flex items-center gap-1.5 text-xs font-semibold bg-primary text-white px-3 py-1.5 rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-all"
             >
@@ -443,6 +459,11 @@ export default function ProjectPipelinePage() {
           </div>
         }
       />
+      {syncMsg && (
+        <div className="mb-4 text-xs px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-700">
+          {syncMsg}
+        </div>
+      )}
 
       {/* Summary stats */}
       <div className="grid grid-cols-3 gap-4 mb-6">

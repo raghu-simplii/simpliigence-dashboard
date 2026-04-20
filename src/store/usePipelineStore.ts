@@ -2,6 +2,17 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { ZohoPipelineProject, PipelineResource } from '../types/forecast';
 import { db } from '../lib/supabaseSync';
+import { supabase } from '../lib/supabase';
+
+export interface ZohoSyncResult {
+  ok: boolean;
+  /** Count of active projects received (on success) */
+  count?: number;
+  /** User-facing error message (on failure) */
+  error?: string;
+  /** Source of the data: 'live' = edge function, 'fallback' = static seed */
+  source: 'live' | 'fallback';
+}
 
 interface PipelineState {
   projects: ZohoPipelineProject[];
@@ -9,6 +20,12 @@ interface PipelineState {
 
   /** Replace all Zoho-sourced projects (preserves manual ones). */
   setZohoProjects: (projects: ZohoPipelineProject[]) => void;
+
+  /**
+   * Invoke the `zoho-projects-sync` Supabase Edge Function.
+   * Falls back to the static seed list if the function isn't deployed or errors.
+   */
+  syncFromZoho: (fallback?: ZohoPipelineProject[]) => Promise<ZohoSyncResult>;
 
   /** Add a manually-created pipeline project. */
   addProject: (project: ZohoPipelineProject) => void;
@@ -48,6 +65,30 @@ export const usePipelineStore = create<PipelineState>()(
           };
         });
         db.replacePipelineProjects(get().projects);
+      },
+
+      syncFromZoho: async (fallback) => {
+        try {
+          const { data, error } = await supabase.functions.invoke<{
+            projects: ZohoPipelineProject[];
+            syncedAt: string;
+            counts?: { total: number; active: number; skipped: number };
+          }>('zoho-projects-sync');
+
+          if (error) throw error;
+          if (!data?.projects) throw new Error('Edge function returned no projects');
+
+          get().setZohoProjects(data.projects);
+          return { ok: true, count: data.projects.length, source: 'live' };
+        } catch (e) {
+          const msg = (e as Error).message || String(e);
+          // Fall back to static seed so the UI still populates something useful
+          if (fallback && fallback.length > 0) {
+            get().setZohoProjects(fallback);
+            return { ok: false, error: msg, count: fallback.length, source: 'fallback' };
+          }
+          return { ok: false, error: msg, source: 'fallback' };
+        }
       },
 
       addProject: (project) => {
