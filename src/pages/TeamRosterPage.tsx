@@ -1,10 +1,84 @@
 import { Fragment, useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { useForecastStore } from '../store';
+import { useForecastStore, usePipelineStore } from '../store';
 import { PageHeader } from '../components/shared/PageHeader';
 import { Card, Badge } from '../components/ui';
 import { MONTHS, emptyMonthRecord } from '../types/forecast';
-import type { Month, ForecastAssignment } from '../types/forecast';
+import type { Month, ForecastAssignment, ZohoPipelineProject } from '../types/forecast';
 import { ChevronDown, ChevronRight, ChevronLeft, Plus, Trash2 } from 'lucide-react';
+
+/* ─── Project options grouped by source ────────────────────────────────
+ *
+ * The Team Roster's project dropdown pulls from three places:
+ *   - Current Projects (Zoho-synced, source === 'zoho')
+ *   - Pipeline        (manually added, source === 'manual')
+ *   - Legacy          (projects that exist in old assignments but not in the
+ *                      pipeline store — typically spreadsheet imports)
+ *
+ * Each option stores { value, label } where:
+ *   - label = what the user sees (project.name — "QuData Centres")
+ *   - value = what gets written to assignment.project. We use
+ *     `forecastName ?? name` so hours join correctly on the Current Projects
+ *     card (which looks up team allocations by forecastName first).
+ *
+ * This makes all three cases work identically:
+ *   - "Paprima" (no forecastName)  → label "Paprima",       value "Paprima"
+ *   - "QuData Centres" w/ alias    → label "QuData Centres", value "QUData"
+ *   - "Llyods List Intelligence"   → label …,                value "LLI"
+ */
+type ProjectSource = 'current' | 'pipeline' | 'legacy';
+interface ProjectOption {
+  value: string;
+  label: string;
+  source: ProjectSource;
+}
+
+function buildProjectOptions(
+  pipelineProjects: ZohoPipelineProject[],
+  assignments: ForecastAssignment[],
+): ProjectOption[] {
+  const seen = new Set<string>();
+  const out: ProjectOption[] = [];
+
+  const add = (label: string, value: string, source: ProjectSource) => {
+    const key = value.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ value, label, source });
+  };
+
+  // 1. Zoho / Current first (most likely to be picked)
+  for (const p of pipelineProjects) {
+    if (p.source !== 'zoho') continue;
+    add(p.name, p.forecastName || p.name, 'current');
+  }
+  // 2. Manual pipeline
+  for (const p of pipelineProjects) {
+    if (p.source !== 'manual') continue;
+    add(p.name, p.forecastName || p.name, 'pipeline');
+  }
+  // 3. Legacy — anything already in assignments that isn't in the pipeline store
+  for (const a of assignments) {
+    if (!a.project) continue;
+    add(a.project, a.project, 'legacy');
+  }
+  return out;
+}
+
+const SOURCE_LABEL: Record<ProjectSource, string> = {
+  current: 'Current Projects (Zoho)',
+  pipeline: 'Pipeline (Planned)',
+  legacy: 'Other (legacy)',
+};
+
+function groupOptionsBySource(options: ProjectOption[]): Record<ProjectSource, ProjectOption[]> {
+  const grouped: Record<ProjectSource, ProjectOption[]> = {
+    current: [],
+    pipeline: [],
+    legacy: [],
+  };
+  for (const o of options) grouped[o.source].push(o);
+  return grouped;
+}
 
 /* ─── week date helpers ────────────────────────────────── */
 function getWeeksInMonth(year: number, monthIdx: number): string[] {
@@ -119,15 +193,16 @@ function InlineInput({
 /* ─── Add Resource form ────────────────────────────────── */
 function AddResourceForm({
   roles,
-  projects,
+  projectOptions,
   onAdd,
   onCancel,
 }: {
   roles: string[];
-  projects: string[];
+  projectOptions: ProjectOption[];
   onAdd: (a: ForecastAssignment) => void;
   onCancel: () => void;
 }) {
+  const grouped = groupOptionsBySource(projectOptions);
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
   const [customRole, setCustomRole] = useState('');
@@ -199,10 +274,23 @@ function AddResourceForm({
           <label className="block text-xs text-slate-500 mb-1">Project *</label>
           <select className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm" value={project} onChange={(e) => setProject(e.target.value)}>
             <option value="">Select...</option>
-            {projects.map((p) => <option key={p} value={p}>{p}</option>)}
+            {(['current', 'pipeline', 'legacy'] as ProjectSource[]).map((src) =>
+              grouped[src].length > 0 ? (
+                <optgroup key={src} label={SOURCE_LABEL[src]}>
+                  {grouped[src].map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label === p.value ? p.label : `${p.label} → ${p.value}`}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null,
+            )}
             <option value="__custom__">+ Custom project</option>
           </select>
           {project === '__custom__' && <input className="w-full mt-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm" placeholder="Custom project..." value={customProject} onChange={(e) => setCustomProject(e.target.value)} />}
+          <p className="mt-1 text-[10px] text-slate-400">
+            Pick from Zoho/Pipeline so hours join to the project card for cost calculation.
+          </p>
         </div>
         <div className="col-span-2 flex items-end gap-2">
           <button onClick={handleSubmit} disabled={!canSubmit} className="px-4 py-1.5 text-sm font-medium rounded-lg bg-primary text-white hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed">Add Resource</button>
@@ -268,6 +356,7 @@ type EditingCell = { empName: string; project: string; field: string } | null;
 
 export default function TeamRosterPage() {
   const assignments = useForecastStore((s) => s.assignments);
+  const pipelineProjects = usePipelineStore((s) => s.projects);
   const {
     addAssignment,
     removeEmployee,
@@ -277,6 +366,12 @@ export default function TeamRosterPage() {
     updateEmployeeRate,
     updateEmployeeType,
   } = useForecastStore();
+
+  const projectOptions = useMemo(
+    () => buildProjectOptions(pipelineProjects, assignments),
+    [pipelineProjects, assignments],
+  );
+  const groupedOptions = useMemo(() => groupOptionsBySource(projectOptions), [projectOptions]);
 
   const groups = useMemo(() => groupAssignments(assignments), [assignments]);
   const now = new Date();
@@ -415,7 +510,7 @@ export default function TeamRosterPage() {
           <button onClick={() => setShowAddForm((v) => !v)} className="px-4 py-2 text-sm font-medium rounded-lg bg-primary text-white hover:bg-primary/90">+ Add Resource</button>
         </div>
 
-        {showAddForm && <AddResourceForm roles={roles} projects={allProjects} onAdd={handleAddResource} onCancel={() => setShowAddForm(false)} />}
+        {showAddForm && <AddResourceForm roles={roles} projectOptions={projectOptions} onAdd={handleAddResource} onCancel={() => setShowAddForm(false)} />}
 
         {/* Month selector */}
         <div className="flex items-center gap-2 mb-4">
@@ -676,12 +771,36 @@ export default function TeamRosterPage() {
                         <td colSpan={5} className="py-1.5 pl-6">
                           {addingProjectFor === g.name ? (
                             <div className="flex items-center gap-2">
-                              <select className="rounded border border-slate-300 px-1.5 py-0.5 text-xs" defaultValue=""
-                                onChange={(e) => { if (e.target.value) handleAddProject(g.name, e.target.value); }}
+                              <select
+                                className="rounded border border-slate-300 px-1.5 py-0.5 text-xs min-w-[220px]"
+                                defaultValue=""
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (!val) return;
+                                  if (val === '__new__') {
+                                    const name = prompt('New project name:');
+                                    if (name && name.trim()) handleAddProject(g.name, name.trim());
+                                  } else {
+                                    handleAddProject(g.name, val);
+                                  }
+                                }}
                               >
                                 <option value="">Select project...</option>
-                                {allProjects.filter((p) => !g.assignments.some((a) => a.project === p)).map((p) => <option key={p} value={p}>{p}</option>)}
-                                <option value="__new__">+ New project</option>
+                                {(['current', 'pipeline', 'legacy'] as ProjectSource[]).map((src) => {
+                                  const opts = groupedOptions[src].filter(
+                                    (o) => !g.assignments.some((a) => a.project === o.value),
+                                  );
+                                  return opts.length > 0 ? (
+                                    <optgroup key={src} label={SOURCE_LABEL[src]}>
+                                      {opts.map((o) => (
+                                        <option key={o.value} value={o.value}>
+                                          {o.label === o.value ? o.label : `${o.label} → ${o.value}`}
+                                        </option>
+                                      ))}
+                                    </optgroup>
+                                  ) : null;
+                                })}
+                                <option value="__new__">+ New project (custom)</option>
                               </select>
                               <button onClick={() => setAddingProjectFor(null)} className="text-xs text-slate-400 hover:text-slate-600">Cancel</button>
                             </div>
