@@ -229,7 +229,7 @@ export const useForecastStore = create<ForecastState>()(
     }),
     {
       name: 'simpliigence-forecast',
-      version: 4,
+      version: 5,
       migrate: (persisted: unknown, version: number) => {
         const old = persisted as Record<string, unknown> | null;
         const assignments = (old?.assignments as ForecastAssignment[]) ?? [];
@@ -244,6 +244,25 @@ export const useForecastStore = create<ForecastState>()(
         // v4: ensure all assignments have stable ids
         for (const a of assignments) {
           if (!a.id) a.id = nanoid();
+        }
+        // v5: rename project strings on existing assignments to the short
+        // forecastName aliases so they join to their Current Projects card
+        // for cost calculation. Case-insensitive match on the source name;
+        // preserves the _originalKey for spreadsheet re-sync.
+        if (version < 5) {
+          const renames: Record<string, string> = {
+            'qudata centres': 'QUData',
+            'matheson constructors': 'Matheson',
+            'cool air': 'CoolAir',
+            'llyods list intelligence': 'LLI',
+          };
+          for (const a of assignments) {
+            const target = renames[a.project?.toLowerCase().trim()];
+            if (target && a.project !== target) {
+              a.project = target;
+              a._manuallyEdited = true;
+            }
+          }
         }
         return { assignments, weekDates };
       },
