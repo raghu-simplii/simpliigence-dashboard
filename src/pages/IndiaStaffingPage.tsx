@@ -8,8 +8,10 @@ import {
 import { useStaffingStore } from '../store/useStaffingStore';
 import { analyzeStaffingStatus } from '../lib/staffingAnalysis';
 import { computeStageTiming } from '../lib/staffingAlerts';
+import { computeFunnel } from '../lib/staffingFunnel';
 import { runStaffingBriefing, type StaffingBriefing } from '../lib/claudeQuery';
 import { StaffingKanban } from '../components/staffing/StaffingKanban';
+import { StageFunnel } from '../components/staffing/StageFunnel';
 import { PageHeader } from '../components/shared/PageHeader';
 import { Card, StatCard, StatusBadge } from '../components/ui';
 import type { StaffingRow, RiskLevel, PipelineStage, StaffingStatus } from '../types/staffing';
@@ -916,6 +918,11 @@ export default function IndiaStaffingPage() {
             <StatCard label="High Risk" value={highRiskCount} icon={<AlertTriangle size={20} />} subtitle={`${filtered.filter((r) => r.risk === 'medium').length} medium`} />
             <StatCard label="Avg Closure Prob" value={`${avgProb}%`} icon={<TrendingUp size={20} />} subtitle="AI + manual blend" />
           </div>
+
+          {/* Funnel + drop-off analysis — reveals bottlenecks at a glance */}
+          <Card className="mb-6">
+            <StageFunnel summary={computeFunnel(requisitions, history)} />
+          </Card>
 
           <Card>
             <div className="flex items-center justify-between mb-3">
