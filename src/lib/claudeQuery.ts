@@ -610,3 +610,199 @@ export async function runStaffingBriefing(
     };
   }
 }
+
+/* ── India Staffing — Smart Query (ask anything about your pipeline) ────
+ *
+ * Scoped to India Staffing data only: accounts, requisitions, statuses,
+ * audit history, and the computed funnel metrics. Uses the same Claude
+ * infrastructure as the main dashboard Smart Query (Opus 4.7 + adaptive
+ * thinking + prompt caching), but with a domain-aware system prompt that
+ * knows how to reason about recruiting pipelines.
+ */
+
+export interface StaffingQueryInput {
+  accounts: StaffingAccount[];
+  requisitions: StaffingRequisition[];
+  statuses: DailyStatus[];
+  history: StaffingHistoryEntry[];
+}
+
+/** Compact JSON payload used for the Smart Query context. */
+function buildStaffingQueryContext(input: StaffingQueryInput) {
+  const { accounts, requisitions, statuses, history } = input;
+  const acctName = (id: string) => accounts.find((a) => a.id === id)?.name || 'Unknown';
+
+  const reqs = requisitions.map((r) => {
+    const timing = computeStageTiming(r, history);
+    const reqStatuses = statuses
+      .filter((s) => s.requisition_id === r.id)
+      .sort((a, b) => b.status_date.localeCompare(a.status_date));
+    return {
+      id: r.id,
+      account: acctName(r.account_id),
+      title: r.title,
+      month: r.month,
+      positions: r.new_positions,
+      stage: r.stage,
+      status: r.status_field,
+      manualProb: r.probability || null,
+      aiProb: r.ai_probability,
+      startDate: r.start_date || null,
+      closeByDate: r.close_by_date || null,
+      expectedClosure: r.expected_closure || null,
+      ageingDays: r.start_date
+        ? Math.max(0, Math.floor((Date.now() - Date.parse(r.start_date)) / 86_400_000))
+        : null,
+      daysInCurrentStage: timing.daysInStage,
+      stuckInStage: timing.isStuck,
+      clientSpoc: r.client_spoc || null,
+      department: r.department || null,
+      anticipation: r.anticipation || null,
+      latestStatus: reqStatuses[0]
+        ? { date: reqStatuses[0].status_date, text: reqStatuses[0].status_text }
+        : null,
+      recentStatuses: reqStatuses.slice(0, 5).map((s) => ({
+        date: s.status_date,
+        text: s.status_text,
+        anticipation: s.anticipation || undefined,
+      })),
+    };
+  });
+
+  // Per-account rollup — useful for "which account has the most stuck reqs?"
+  const byAccount = new Map<string, { active: number; closed: number; lost: number; positions: number }>();
+  for (const r of requisitions) {
+    const key = acctName(r.account_id);
+    const entry = byAccount.get(key) || { active: 0, closed: 0, lost: 0, positions: 0 };
+    if (['Lost', 'Cancelled'].includes(r.status_field)) entry.lost++;
+    else if (r.status_field === 'Closed') entry.closed++;
+    else { entry.active++; entry.positions += r.new_positions; }
+    byAccount.set(key, entry);
+  }
+  const accountRollup = [...byAccount.entries()].map(([name, s]) => ({
+    account: name, activeReqs: s.active, closedReqs: s.closed, lostReqs: s.lost, activePositions: s.positions,
+  }));
+
+  // Recent audit-log activity (last 14 days) — useful for momentum questions
+  const cutoff = new Date(Date.now() - 14 * 86_400_000).toISOString();
+  const recentChanges = history
+    .filter((h) => h.changed_at >= cutoff)
+    .sort((a, b) => b.changed_at.localeCompare(a.changed_at))
+    .slice(0, 80)
+    .map((h) => {
+      const req = requisitions.find((r) => r.id === h.requisition_id);
+      return {
+        at: h.changed_at.slice(0, 10),
+        account: req ? acctName(req.account_id) : 'Unknown',
+        reqTitle: req?.title || h.requisition_id,
+        field: h.field,
+        from: h.old_value,
+        to: h.new_value,
+      };
+    });
+
+  return {
+    today: new Date().toISOString().slice(0, 10),
+    totals: {
+      totalReqs: requisitions.length,
+      activeReqs: requisitions.filter((r) => !['Closed', 'Lost', 'Cancelled'].includes(r.status_field)).length,
+      stuckReqs: requisitions.filter((r) => {
+        if (['Closed', 'Lost', 'Cancelled'].includes(r.status_field)) return false;
+        return computeStageTiming(r, history).isStuck;
+      }).length,
+    },
+    accounts: accountRollup,
+    reqs,
+    recentChanges,
+  };
+}
+
+const STAFFING_QUERY_SYSTEM = `You are a recruiting analytics assistant for the India Staffing team. Answer questions about the team's requisition pipeline accurately, using ONLY the JSON data provided.
+
+Hard rules:
+- Compute every number by actually counting/summing the data. Don't estimate.
+- If the data can't answer the question, say so — don't invent account names, req titles, or numbers.
+- Cite specific reqs ("**Ciklum – Java**", "**Paprima R2**") rather than vague groups where possible.
+- Be concise. Under 200 words. Bullets preferred over prose for lists.
+
+Domain vocabulary:
+- "Active" reqs: status is Open / In Progress / On Hold (NOT Closed / Lost / Cancelled).
+- "Archived" reqs: status is Closed, Lost, or Cancelled.
+- "Stuck": daysInCurrentStage exceeds the stage's threshold (field stuckInStage === true).
+- "Ageing": days since the start_date — how long the req has been open end-to-end.
+- Stages in order: Sourcing → Profiles Shared → Interview → Shortlisted → Client Round → Closed/Selected → Onboarding.
+- "No hopes", "reject", "dropped out" in status text = negative sentiment. "Select", "confirmed", "verbal offer" = positive.
+
+How to answer common questions:
+- "What's stuck?" → filter reqs where stuckInStage === true.
+- "What closed recently?" → look in recentChanges for status_field transitions to Closed, or stage transitions to Onboarding.
+- "Which account is strongest/weakest?" → use accountRollup. Weakest = high lostReqs relative to activeReqs, or high activePositions but no closedReqs.
+- "Forecast" / "closure probability" questions → use aiProb (AI-derived) and manualProb (recruiter override). Effective prob = manualProb if set > 0 else aiProb.
+- "What moved this week?" → recentChanges filtered to last 7 days.
+
+Output format — reply with a single JSON object, no prose outside it:
+
+{
+  "answer": "<markdown text under 200 words. Use **bold** for key names/numbers. Use '- ' bullets for lists.>",
+  "table": null | {
+    "columns": ["<col header>", ...],
+    "rows": [{"<col header>": <string|number>, ...}, ...]
+  }
+}
+
+Include a table whenever the answer is a list of reqs, accounts, or time buckets. Skip it for single-number answers.`;
+
+export async function runStaffingQuery(
+  query: string,
+  input: StaffingQueryInput,
+): Promise<QueryResult> {
+  const client = getClient();
+  if (!client) {
+    return { answer: 'Claude API key not configured. Go to Settings to add your Anthropic API key.' };
+  }
+  const context = buildStaffingQueryContext(input);
+  try {
+    const response = await client.messages.create({
+      model: MODEL,
+      max_tokens: 2048,
+      thinking: { type: 'adaptive' },
+      system: [
+        { type: 'text', text: STAFFING_QUERY_SYSTEM },
+        {
+          type: 'text',
+          text: `DATA (JSON):\n${JSON.stringify(context)}`,
+          cache_control: { type: 'ephemeral' },
+        },
+      ],
+      messages: [{ role: 'user', content: query }],
+    });
+
+    const textBlock = response.content.find((b): b is Anthropic.TextBlock => b.type === 'text');
+    if (!textBlock) return { answer: 'Claude returned an empty response. Try rephrasing.' };
+    const parsed = parseClaudeJson(textBlock.text);
+    if (!parsed) return { answer: textBlock.text };
+
+    const result: QueryResult = { answer: parsed.answer };
+    if (parsed.table && parsed.table.rows.length > 0) {
+      result.columns = parsed.table.columns;
+      result.data = parsed.table.rows;
+    }
+    return result;
+  } catch (err) {
+    if (err instanceof Anthropic.AuthenticationError) return { answer: 'Invalid Claude API key. Please check your key in Settings.' };
+    if (err instanceof Anthropic.RateLimitError) return { answer: 'Rate limit reached. Please wait a moment and try again.' };
+    if (err instanceof Anthropic.APIError) return { answer: `Claude API error (${err.status}): ${err.message.slice(0, 300)}` };
+    return { answer: `Failed to reach Claude: ${err instanceof Error ? err.message : 'Network error'}.` };
+  }
+}
+
+/** Suggested starter questions for the India Staffing Smart Query. */
+export const STAFFING_SUGGESTED_QUERIES = [
+  'Which reqs are at risk of missing their close date?',
+  'What moved in the last 7 days?',
+  'Which account has the weakest pipeline right now?',
+  'Summarize Ciklum\'s open reqs',
+  'Show me reqs stuck in Client Round',
+  'What\'s my best shot at closing this month?',
+  'Which reqs have had no status update in 10+ days?',
+];

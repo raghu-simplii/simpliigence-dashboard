@@ -12,6 +12,7 @@ import { computeFunnel } from '../lib/staffingFunnel';
 import { runStaffingBriefing, type StaffingBriefing } from '../lib/claudeQuery';
 import { StaffingKanban } from '../components/staffing/StaffingKanban';
 import { StageFunnel } from '../components/staffing/StageFunnel';
+import { StaffingSmartQuery } from '../components/staffing/StaffingSmartQuery';
 import { PageHeader } from '../components/shared/PageHeader';
 import { Card, StatCard, StatusBadge } from '../components/ui';
 import type { StaffingRow, RiskLevel, PipelineStage, StaffingStatus } from '../types/staffing';
@@ -724,6 +725,9 @@ export default function IndiaStaffingPage() {
           </div>
         )}
       </div>
+
+      {/* Smart Query — natural-language Q&A over the full staffing data */}
+      <StaffingSmartQuery input={{ accounts, requisitions, statuses, history }} />
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-6">
