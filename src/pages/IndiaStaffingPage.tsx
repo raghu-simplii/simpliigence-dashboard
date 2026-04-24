@@ -1,11 +1,15 @@
 // @ts-nocheck
-import React, { useState, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import {
   Users, AlertTriangle, TrendingUp, CheckCircle, Upload,
   Download, Brain, BarChart3, Building2, Pencil, Trash2, Save, X, ChevronDown, ChevronRight, Plus, Archive, History,
+  Columns, RefreshCw, Sparkles, Loader2, Clock,
 } from 'lucide-react';
 import { useStaffingStore } from '../store/useStaffingStore';
 import { analyzeStaffingStatus } from '../lib/staffingAnalysis';
+import { computeStageTiming } from '../lib/staffingAlerts';
+import { runStaffingBriefing, type StaffingBriefing } from '../lib/claudeQuery';
+import { StaffingKanban } from '../components/staffing/StaffingKanban';
 import { PageHeader } from '../components/shared/PageHeader';
 import { Card, StatCard, StatusBadge } from '../components/ui';
 import type { StaffingRow, RiskLevel, PipelineStage, StaffingStatus } from '../types/staffing';
@@ -99,7 +103,7 @@ export default function IndiaStaffingPage() {
   const [monthFilter, setMonthFilter] = useState('all');
   const [accountFilter, setAccountFilter] = useState('all');
   const [riskFilter, setRiskFilter] = useState<string>('all');
-  const [activeTab, setActiveTab] = useState<'overview' | 'accounts' | 'forecast'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'board' | 'accounts' | 'forecast'>('overview');
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [showArchive, setShowArchive] = useState(false);
@@ -107,6 +111,51 @@ export default function IndiaStaffingPage() {
   const todayStr = new Date().toISOString().slice(0, 10);
   const [newReq, setNewReq] = useState({ accountId: '', newAccountName: '', title: '', month: 'April', positions: 1, expectedClosure: '', anticipation: '', clientSpoc: '', department: '', startDate: todayStr, closeByDate: '' });
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Bulk selection state — keyed by requisition id. Only applies to the active
+  // (non-archived) rows; clicking the header checkbox toggles "all visible".
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  // AI Daily Briefing (cached per day in localStorage — see runStaffingBriefing)
+  const [briefing, setBriefing] = useState<StaffingBriefing | null>(null);
+  const [briefingLoading, setBriefingLoading] = useState(false);
+  const [briefingExpanded, setBriefingExpanded] = useState(true);
+
+  const accountNameById = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const a of accounts) m[a.id] = a.name;
+    return m;
+  }, [accounts]);
+
+  // Fetch the briefing once on mount (it self-caches for the calendar day so
+  // subsequent page loads are free). Depends only on data identity so it
+  // re-runs if the underlying data meaningfully changes.
+  useEffect(() => {
+    let cancelled = false;
+    async function load(force = false) {
+      setBriefingLoading(true);
+      try {
+        const b = await runStaffingBriefing({ accounts, requisitions, statuses, history }, { forceRefresh: force });
+        if (!cancelled) setBriefing(b);
+      } finally {
+        if (!cancelled) setBriefingLoading(false);
+      }
+    }
+    load(false);
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accounts.length, requisitions.length, statuses.length, history.length]);
+
+  const regenerateBriefing = useCallback(async () => {
+    setBriefingLoading(true);
+    try {
+      const b = await runStaffingBriefing({ accounts, requisitions, statuses, history }, { forceRefresh: true });
+      setBriefing(b);
+    } finally {
+      setBriefingLoading(false);
+    }
+  }, [accounts, requisitions, statuses, history]);
 
   /* -- Build enriched rows -- */
   const rows: StaffingRow[] = useMemo(() => {
@@ -294,6 +343,7 @@ export default function IndiaStaffingPage() {
 
   const tabs = [
     { key: 'overview' as const, label: 'Executive Overview', icon: BarChart3 },
+    { key: 'board' as const, label: 'Board', icon: Columns },
     { key: 'accounts' as const, label: 'Account Deep Dive', icon: Building2 },
     { key: 'forecast' as const, label: 'AI Forecast', icon: Brain },
   ];
@@ -309,10 +359,13 @@ export default function IndiaStaffingPage() {
   }, [filtered]);
 
   /** Table row renderer — shared between active and archive tables */
-  const renderRow = (r: StaffingRow, opts: { archived?: boolean } = {}) => {
+  const renderRow = (r: StaffingRow, opts: { archived?: boolean; selectable?: boolean } = {}) => {
     const isExpanded = expandedRows.has(r.id);
     const reqStatuses = statuses.filter(s => s.requisition_id === r.id).sort((a, b) => b.status_date.localeCompare(a.status_date));
     const rowHistory = historyFor(r.id);
+    const req = requisitions.find((x) => x.id === r.id);
+    const timing = req ? computeStageTiming(req, history) : { daysInStage: 0, stuckThreshold: 14, isStuck: false };
+    const isChecked = selectedIds.has(r.id);
     const fieldLabel = (f: string) => ({
       title: 'Requisition', account_id: 'Account', month: 'Month', new_positions: 'Positions',
       expected_closure: 'Expected Closure', start_date: 'Start Date', close_by_date: 'Close Date',
@@ -323,7 +376,24 @@ export default function IndiaStaffingPage() {
 
     return (
       <React.Fragment key={r.id}>
-        <tr className={`border-b border-slate-50 hover:bg-slate-50/50 ${opts.archived ? 'opacity-75' : ''}`}>
+        <tr className={`border-b border-slate-50 hover:bg-slate-50/50 ${opts.archived ? 'opacity-75' : ''} ${isChecked ? 'bg-blue-50/40' : ''}`}>
+          {opts.selectable && (
+            <td className="p-1 text-center">
+              <input
+                type="checkbox"
+                checked={isChecked}
+                onChange={(e) => {
+                  setSelectedIds((prev) => {
+                    const next = new Set(prev);
+                    if (e.target.checked) next.add(r.id);
+                    else next.delete(r.id);
+                    return next;
+                  });
+                }}
+                className="cursor-pointer"
+              />
+            </td>
+          )}
           {/* Expand */}
           <td className="p-1 text-center">
             <button onClick={() => toggleRow(r.id)} className="p-0.5 rounded hover:bg-slate-100" title="Show status & audit history">
@@ -390,9 +460,19 @@ export default function IndiaStaffingPage() {
           </td>
           {/* Stage */}
           <td className="p-2">
-            <EditableCell value={r.stage} type="select" options={PIPELINE_STAGES}
-              onSave={(val) => handleCellSave(r.id, 'stage', val)}
-              displayContent={<span className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white" style={{ background: STAGE_COLORS[r.stage] }}>{r.stage}</span>} />
+            <div className="flex items-center gap-1">
+              <EditableCell value={r.stage} type="select" options={PIPELINE_STAGES}
+                onSave={(val) => handleCellSave(r.id, 'stage', val)}
+                displayContent={<span className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white" style={{ background: STAGE_COLORS[r.stage] }}>{r.stage}</span>} />
+              {!opts.archived && timing.isStuck && (
+                <span
+                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-red-100 text-red-700 whitespace-nowrap"
+                  title={`In ${r.stage} for ${timing.daysInStage} days — threshold ${timing.stuckThreshold}. Needs attention.`}
+                >
+                  <Clock size={9} /> {timing.daysInStage}d
+                </span>
+              )}
+            </div>
           </td>
           {/* Risk */}
           <td className="p-2">
@@ -451,7 +531,7 @@ export default function IndiaStaffingPage() {
         {/* Expanded status + audit history */}
         {isExpanded && (
           <tr key={`${r.id}-exp`}>
-            <td colSpan={17} className="bg-slate-50/80 p-0">
+            <td colSpan={opts.selectable ? 18 : 17} className="bg-slate-50/80 p-0">
               <div className="px-8 py-3 space-y-4">
                 {/* Status updates */}
                 <div>
@@ -516,9 +596,30 @@ export default function IndiaStaffingPage() {
     );
   };
 
-  const TableHeader = () => (
+  const TableHeader = ({ selectable = false }: { selectable?: boolean } = {}) => (
     <thead>
       <tr className="border-b-2 border-slate-100">
+        {selectable && (
+          <th className="w-6 p-2 text-center">
+            <input
+              type="checkbox"
+              checked={filtered.length > 0 && filtered.every((r) => selectedIds.has(r.id))}
+              ref={(el) => {
+                if (el) {
+                  const some = filtered.some((r) => selectedIds.has(r.id));
+                  const all = filtered.length > 0 && filtered.every((r) => selectedIds.has(r.id));
+                  el.indeterminate = some && !all;
+                }
+              }}
+              onChange={(e) => {
+                if (e.target.checked) setSelectedIds(new Set(filtered.map((r) => r.id)));
+                else setSelectedIds(new Set());
+              }}
+              className="cursor-pointer"
+              title="Select all visible"
+            />
+          </th>
+        )}
         <th className="w-6 p-2"></th>
         <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Account</th>
         <th className="text-left p-2 text-slate-400 font-bold uppercase tracking-wide text-[10px]">Requisition</th>
@@ -543,6 +644,84 @@ export default function IndiaStaffingPage() {
   return (
     <>
       <PageHeader title="India Staffing" subtitle="Real-time staffing tracker with AI-powered closure forecasting" />
+
+      {/* AI Daily Briefing — top-of-page summary of what changed + what needs attention. */}
+      <div className="mb-5 rounded-xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-blue-50 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-violet-100">
+          <div className="flex items-center gap-2">
+            <Sparkles size={15} className="text-violet-600" />
+            <span className="text-sm font-bold text-slate-800">Daily Briefing</span>
+            <span className="bg-gradient-to-r from-violet-500 to-blue-500 text-white text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full">AI</span>
+            {briefing?.generatedAt && (
+              <span className="text-[10px] text-slate-400">
+                · updated {new Date(briefing.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={regenerateBriefing}
+              disabled={briefingLoading}
+              className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-50 transition-colors"
+              title="Regenerate briefing with the latest data"
+            >
+              {briefingLoading ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}
+              {briefingLoading ? 'Generating' : 'Regenerate'}
+            </button>
+            <button
+              onClick={() => setBriefingExpanded((v) => !v)}
+              className="p-1 rounded text-slate-400 hover:bg-slate-100"
+              title={briefingExpanded ? 'Collapse' : 'Expand'}
+            >
+              {briefingExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </button>
+          </div>
+        </div>
+        {briefingExpanded && (
+          <div className="px-4 py-3">
+            {briefingLoading && !briefing && (
+              <div className="text-xs text-slate-400 italic flex items-center gap-2">
+                <Loader2 size={12} className="animate-spin" /> Claude is reviewing your pipeline...
+              </div>
+            )}
+            {briefing && (
+              <div className="text-[12px] leading-relaxed text-slate-700 [&_strong]:text-slate-900 [&_em]:text-slate-500">
+                {briefing.markdown.split('\n').map((line, i) => {
+                  const trimmed = line.trim();
+                  if (!trimmed) return null;
+                  const isBullet = trimmed.startsWith('- ') || trimmed.startsWith('* ');
+                  const content = isBullet ? trimmed.slice(2) : trimmed;
+                  const parts = content.split(/(\*\*[^*]+\*\*|_[^_]+_)/).filter(Boolean);
+                  return (
+                    <p key={i} className={`${isBullet ? 'ml-4 before:content-["•"] before:mr-2 before:text-violet-400' : ''} my-1`}>
+                      {parts.map((part, j) => {
+                        if (part.startsWith('**') && part.endsWith('**')) return <strong key={j}>{part.slice(2, -2)}</strong>;
+                        if (part.startsWith('_') && part.endsWith('_')) return <em key={j}>{part.slice(1, -1)}</em>;
+                        return <span key={j}>{part}</span>;
+                      })}
+                    </p>
+                  );
+                })}
+              </div>
+            )}
+            {briefing?.alerts && briefing.alerts.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-violet-100 flex flex-wrap gap-1.5">
+                {briefing.alerts.map((a, i) => {
+                  const req = requisitions.find((r) => r.id === a.requisitionId);
+                  if (!req) return null;
+                  const acct = accountNameById[req.account_id] || 'Unknown';
+                  const bg = a.severity === 'high' ? 'bg-red-100 text-red-800' : a.severity === 'medium' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800';
+                  return (
+                    <span key={i} className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${bg}`} title={`${acct} — ${req.title}`}>
+                      <AlertTriangle size={10} /> {acct}: {a.message}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-6">
@@ -704,6 +883,30 @@ export default function IndiaStaffingPage() {
         ))}
       </div>
 
+      {/* ====== BOARD TAB ====== */}
+      {activeTab === 'board' && (
+        <Card>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-bold text-sm">Pipeline Board</h3>
+            <span className="text-[10px] text-blue-500 font-medium bg-blue-50 px-2 py-1 rounded-full">
+              Drag cards between columns to change stage. Stage changes are audit-logged.
+            </span>
+          </div>
+          <StaffingKanban
+            requisitions={requisitions.filter((r) => {
+              if (monthFilter !== 'all' && r.month !== monthFilter) return false;
+              const acctName = accountNameById[r.account_id];
+              if (accountFilter !== 'all' && acctName !== accountFilter) return false;
+              return true;
+            })}
+            history={history}
+            accountNameById={accountNameById}
+            onMoveStage={(reqId, newStage) => updateRequisition(reqId, { stage: newStage })}
+            alerts={briefing?.alerts || []}
+          />
+        </Card>
+      )}
+
       {/* ====== OVERVIEW TAB ====== */}
       {activeTab === 'overview' && (
         <>
@@ -719,11 +922,97 @@ export default function IndiaStaffingPage() {
               <h3 className="font-bold text-sm">Active Requisitions</h3>
               <span className="text-[10px] text-blue-500 font-medium bg-blue-50 px-2 py-1 rounded-full">Click any cell to edit | AI Prob auto-updates from status history</span>
             </div>
+
+            {/* Bulk action bar — visible when any rows are checked */}
+            {selectedIds.size > 0 && (
+              <div className="mb-3 px-3 py-2 rounded-lg bg-slate-900 text-white flex items-center gap-3 flex-wrap">
+                <span className="text-xs font-semibold">
+                  {selectedIds.size} selected
+                </span>
+                <div className="h-4 w-px bg-slate-600" />
+                <label className="flex items-center gap-1.5 text-[11px]">
+                  Stage →
+                  <select
+                    className="bg-slate-800 text-white border border-slate-700 rounded px-1.5 py-0.5 text-[11px]"
+                    defaultValue=""
+                    disabled={bulkBusy}
+                    onChange={(e) => {
+                      const next = e.target.value as PipelineStage;
+                      if (!next) return;
+                      setBulkBusy(true);
+                      try {
+                        selectedIds.forEach((id) => updateRequisition(id, { stage: next }));
+                        setSelectedIds(new Set());
+                      } finally { setBulkBusy(false); e.currentTarget.value = ''; }
+                    }}
+                  >
+                    <option value="">Change stage...</option>
+                    {PIPELINE_STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </label>
+                <label className="flex items-center gap-1.5 text-[11px]">
+                  Status →
+                  <select
+                    className="bg-slate-800 text-white border border-slate-700 rounded px-1.5 py-0.5 text-[11px]"
+                    defaultValue=""
+                    disabled={bulkBusy}
+                    onChange={(e) => {
+                      const next = e.target.value as StaffingStatus;
+                      if (!next) return;
+                      setBulkBusy(true);
+                      try {
+                        selectedIds.forEach((id) => updateRequisition(id, { status_field: next }));
+                        setSelectedIds(new Set());
+                      } finally { setBulkBusy(false); e.currentTarget.value = ''; }
+                    }}
+                  >
+                    <option value="">Change status...</option>
+                    {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </label>
+                <button
+                  onClick={() => {
+                    if (!confirm(`Archive ${selectedIds.size} requisitions as Closed?`)) return;
+                    setBulkBusy(true);
+                    try {
+                      selectedIds.forEach((id) => updateRequisition(id, { status_field: 'Closed' }));
+                      setSelectedIds(new Set());
+                    } finally { setBulkBusy(false); }
+                  }}
+                  disabled={bulkBusy}
+                  className="flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
+                >
+                  <Archive size={11} /> Mark Closed
+                </button>
+                <button
+                  onClick={() => {
+                    if (!confirm(`Delete ${selectedIds.size} requisitions permanently?`)) return;
+                    setBulkBusy(true);
+                    try {
+                      selectedIds.forEach((id) => removeRequisition(id));
+                      setSelectedIds(new Set());
+                    } finally { setBulkBusy(false); }
+                  }}
+                  disabled={bulkBusy}
+                  className="flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded bg-rose-600 hover:bg-rose-500 disabled:opacity-50"
+                >
+                  <Trash2 size={11} /> Delete
+                </button>
+                <div className="flex-1" />
+                <button
+                  onClick={() => setSelectedIds(new Set())}
+                  className="text-[11px] text-slate-300 hover:text-white"
+                >
+                  Clear selection
+                </button>
+              </div>
+            )}
+
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
-                <TableHeader />
+                <TableHeader selectable />
                 <tbody>
-                  {filtered.map((r) => renderRow(r))}
+                  {filtered.map((r) => renderRow(r, { selectable: true }))}
                 </tbody>
               </table>
             </div>

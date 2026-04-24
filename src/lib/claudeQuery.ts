@@ -22,7 +22,14 @@ import type {
   ScenarioSettings,
   StaffingRequest,
 } from '../types/hiringForecast';
+import type {
+  StaffingAccount,
+  StaffingRequisition,
+  DailyStatus,
+  StaffingHistoryEntry,
+} from '../types/staffing';
 import { deriveEmployeeSummaries, deriveProjectSummaries } from './parseSpreadsheet';
+import { computeStageTiming } from './staffingAlerts';
 import type { QueryResult } from './queryEngine';
 
 const MONTHS: Month[] = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -361,6 +368,245 @@ export async function runClaudeQuery(
     }
     return {
       answer: `Failed to reach Claude: ${err instanceof Error ? err.message : 'Network error'}. Check your internet connection.`,
+    };
+  }
+}
+
+/* ── India Staffing — AI Daily Briefing ─────────────────────────────────
+ *
+ * Claude reads the current active reqs, recent status updates, and recent
+ * audit-log changes, and produces a 3–5 bullet operator briefing:
+ *   - what moved yesterday / today
+ *   - what's stuck and needs attention
+ *   - any risk signals from status text sentiment
+ *
+ * Cached for the day in localStorage so we don't re-spend tokens on every
+ * page load. Pass `forceRefresh` to bypass.
+ */
+
+export interface StaffingBriefing {
+  /** Markdown-formatted summary text */
+  markdown: string;
+  /** Timestamp when this briefing was generated */
+  generatedAt: string;
+  /** Machine-readable alerts used to drive red badges in the UI */
+  alerts: Array<{
+    requisitionId: string;
+    severity: 'high' | 'medium' | 'info';
+    message: string;
+  }>;
+}
+
+export interface StaffingBriefingInput {
+  accounts: StaffingAccount[];
+  requisitions: StaffingRequisition[];
+  statuses: DailyStatus[];
+  history: StaffingHistoryEntry[];
+}
+
+const BRIEFING_CACHE_KEY = 'simpliigence-india-briefing-v1';
+
+function readCachedBriefing(): StaffingBriefing | null {
+  try {
+    const raw = localStorage.getItem(BRIEFING_CACHE_KEY);
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as StaffingBriefing;
+    // Cache is good for the current calendar date only (local time).
+    const today = new Date().toISOString().slice(0, 10);
+    const genDate = (cached.generatedAt || '').slice(0, 10);
+    if (genDate === today) return cached;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedBriefing(b: StaffingBriefing): void {
+  try { localStorage.setItem(BRIEFING_CACHE_KEY, JSON.stringify(b)); } catch { /* ignore */ }
+}
+
+/** Build a compact JSON context representing the state relevant for a briefing. */
+function buildBriefingContext(input: StaffingBriefingInput) {
+  const { accounts, requisitions, statuses, history } = input;
+  const acctName = (id: string) => accounts.find((a) => a.id === id)?.name || 'Unknown';
+
+  // Only consider non-archived reqs for the briefing.
+  const active = requisitions.filter((r) => !['Closed', 'Lost', 'Cancelled'].includes(r.status_field));
+
+  const activeSummary = active.map((r) => {
+    const timing = computeStageTiming(r, history);
+    const reqStatuses = statuses
+      .filter((s) => s.requisition_id === r.id)
+      .sort((a, b) => b.status_date.localeCompare(a.status_date))
+      .slice(0, 3);
+    return {
+      id: r.id,
+      account: acctName(r.account_id),
+      title: r.title,
+      positions: r.new_positions,
+      stage: r.stage,
+      status: r.status_field,
+      probability: r.probability || null,
+      aiProbability: r.ai_probability,
+      daysInStage: timing.daysInStage,
+      stuckThreshold: timing.stuckThreshold,
+      stuck: timing.isStuck,
+      ageing: r.start_date
+        ? Math.max(0, Math.floor((Date.now() - Date.parse(r.start_date)) / 86_400_000))
+        : null,
+      closeByDate: r.close_by_date || null,
+      clientSpoc: r.client_spoc || null,
+      anticipation: r.anticipation || null,
+      recentStatuses: reqStatuses.map((s) => ({ date: s.status_date, text: s.status_text })),
+    };
+  });
+
+  // History in the last 48 hours — what moved recently.
+  const cutoff = new Date(Date.now() - 48 * 3_600_000).toISOString();
+  const recentChanges = history
+    .filter((h) => h.changed_at >= cutoff)
+    .sort((a, b) => b.changed_at.localeCompare(a.changed_at))
+    .slice(0, 50)
+    .map((h) => {
+      const req = requisitions.find((r) => r.id === h.requisition_id);
+      return {
+        at: h.changed_at,
+        account: req ? acctName(req.account_id) : 'Unknown',
+        reqTitle: req?.title || h.requisition_id,
+        field: h.field,
+        from: h.old_value || '∅',
+        to: h.new_value || '∅',
+      };
+    });
+
+  return {
+    today: new Date().toISOString().slice(0, 10),
+    totals: {
+      activeRequisitions: active.length,
+      activePositions: active.reduce((s, r) => s + r.new_positions, 0),
+      stuck: activeSummary.filter((r) => r.stuck).length,
+    },
+    active: activeSummary,
+    recentChanges,
+  };
+}
+
+const BRIEFING_SYSTEM = `You are a recruiting operations assistant. Your job is to give the India Staffing team a tight daily briefing based on the JSON data provided.
+
+Hard rules:
+- Use only the data provided. Never invent names, numbers, or events.
+- Keep the summary under 140 words.
+- Prioritize signal over noise: highlight what moved in the last 48 hours, what's stuck, and what needs human follow-up.
+
+Output format — reply with a SINGLE JSON object, no prose outside it:
+
+{
+  "markdown": "<3–5 bullet summary. Use '- ' bullets. **Bold** req titles and account names.>",
+  "alerts": [
+    { "requisitionId": "<id from data>", "severity": "high" | "medium" | "info", "message": "<≤12 words>" }
+  ]
+}
+
+Alert guidance:
+- "high": stuck for more than 2× the stage threshold, strong negative sentiment in recent status ("no hopes", "reject", "dropped out"), or close date already passed with no closure.
+- "medium": stuck at or over the stage threshold, or sentiment flat for >1 week.
+- "info": notable positive momentum (multiple closures, client select), worth celebrating.
+
+Cap at 6 alerts total. Only include requisitionId values that actually appear in the data.`;
+
+export async function runStaffingBriefing(
+  input: StaffingBriefingInput,
+  opts: { forceRefresh?: boolean } = {},
+): Promise<StaffingBriefing> {
+  if (!opts.forceRefresh) {
+    const cached = readCachedBriefing();
+    if (cached) return cached;
+  }
+
+  const client = getClient();
+  if (!client) {
+    return {
+      markdown: '_Add your Anthropic API key in Settings to get an AI daily briefing._',
+      generatedAt: new Date().toISOString(),
+      alerts: [],
+    };
+  }
+
+  const context = buildBriefingContext(input);
+  // If there's effectively nothing going on, don't burn a Claude call.
+  if (context.active.length === 0) {
+    const empty: StaffingBriefing = {
+      markdown: '_No active requisitions right now — briefing skipped._',
+      generatedAt: new Date().toISOString(),
+      alerts: [],
+    };
+    writeCachedBriefing(empty);
+    return empty;
+  }
+
+  try {
+    const response = await client.messages.create({
+      model: MODEL,
+      max_tokens: 1024,
+      thinking: { type: 'adaptive' },
+      system: [
+        { type: 'text', text: BRIEFING_SYSTEM },
+        {
+          type: 'text',
+          text: `DATA (JSON):\n${JSON.stringify(context)}`,
+          cache_control: { type: 'ephemeral' },
+        },
+      ],
+      messages: [
+        { role: 'user', content: 'Write today\'s India staffing briefing per the format above.' },
+      ],
+    });
+
+    const textBlock = response.content.find(
+      (b): b is Anthropic.TextBlock => b.type === 'text',
+    );
+    const raw = textBlock?.text ?? '';
+    const match = raw.match(/\{[\s\S]*\}/);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let parsed: any = null;
+    if (match) {
+      try { parsed = JSON.parse(match[0]); } catch { /* ignore */ }
+    }
+    if (!parsed?.markdown) {
+      return {
+        markdown: raw || 'Claude returned an empty briefing. Try Regenerate.',
+        generatedAt: new Date().toISOString(),
+        alerts: [],
+      };
+    }
+
+    const briefing: StaffingBriefing = {
+      markdown: String(parsed.markdown),
+      generatedAt: new Date().toISOString(),
+      alerts: Array.isArray(parsed.alerts)
+        ? (parsed.alerts as unknown[])
+          .filter((a): a is { requisitionId: string; severity: string; message: string } =>
+            !!a && typeof a === 'object' && 'requisitionId' in a && 'message' in a,
+          )
+          .map((a: { requisitionId: string; severity: string; message: string }) => ({
+            requisitionId: String(a.requisitionId),
+            severity: (['high', 'medium', 'info'] as const).includes(a.severity as 'high' | 'medium' | 'info')
+              ? (a.severity as 'high' | 'medium' | 'info')
+              : ('info' as const),
+            message: String(a.message).slice(0, 200),
+          }))
+          .slice(0, 6)
+        : [],
+    };
+
+    writeCachedBriefing(briefing);
+    return briefing;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      markdown: `_AI briefing unavailable: ${msg.slice(0, 200)}_`,
+      generatedAt: new Date().toISOString(),
+      alerts: [],
     };
   }
 }
