@@ -62,6 +62,73 @@ export interface StaffingHistoryEntry {
   changed_by: string;
 }
 
+/** Lifecycle stage for a single candidate on a requisition. */
+export type CandidateStage =
+  | 'Submitted'
+  | 'Screening'
+  | 'Interview Scheduled'
+  | 'Interviewed'
+  | 'Shortlisted'
+  | 'Client Round'
+  | 'Selected'
+  | 'Offer Extended'
+  | 'Offer Accepted'
+  | 'Joined'
+  | 'Rejected'
+  | 'Dropped Out'
+  | 'On Hold';
+
+export const CANDIDATE_STAGES: CandidateStage[] = [
+  'Submitted', 'Screening', 'Interview Scheduled', 'Interviewed', 'Shortlisted',
+  'Client Round', 'Selected', 'Offer Extended', 'Offer Accepted', 'Joined',
+  'Rejected', 'Dropped Out', 'On Hold',
+];
+
+/** Stages considered "alive" (still in the running). */
+export const ACTIVE_CANDIDATE_STAGES: CandidateStage[] = [
+  'Submitted', 'Screening', 'Interview Scheduled', 'Interviewed', 'Shortlisted',
+  'Client Round', 'Selected', 'Offer Extended', 'Offer Accepted', 'Joined',
+];
+
+export const CANDIDATE_STAGE_COLORS: Record<CandidateStage, string> = {
+  'Submitted':           '#94a3b8',
+  'Screening':           '#60a5fa',
+  'Interview Scheduled': '#06b6d4',
+  'Interviewed':         '#f59e0b',
+  'Shortlisted':         '#8b5cf6',
+  'Client Round':        '#3b82f6',
+  'Selected':            '#22c55e',
+  'Offer Extended':      '#10b981',
+  'Offer Accepted':      '#059669',
+  'Joined':              '#047857',
+  'Rejected':            '#ef4444',
+  'Dropped Out':         '#b91c1c',
+  'On Hold':             '#64748b',
+};
+
+/** One candidate being submitted/tracked against a requisition. */
+export interface StaffingCandidate {
+  id: string;
+  requisition_id: string;
+  name: string;
+  /** e.g. "12 yrs" or numeric years — free-text so users can type "8.5" or "Sr" */
+  experience: string;
+  /** Current lifecycle stage. Changes are NOT audited by default. */
+  stage: CandidateStage;
+  /** ISO date when the candidate was first submitted */
+  submit_date: string;
+  /** Free-text interview / screening feedback */
+  feedback: string;
+  /** Where the candidate came from — "referral", "LinkedIn", "Naukri", "vendor", etc. */
+  source: string;
+  /** Candidate contact email (optional) */
+  email: string;
+  /** Candidate phone (optional) */
+  phone: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export type RiskLevel = 'high' | 'medium' | 'low';
 
 export type PipelineStage =

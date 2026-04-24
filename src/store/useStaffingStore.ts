@@ -8,6 +8,7 @@ import type {
   StaffingStatus,
   PipelineStage,
   StaffingHistoryEntry,
+  StaffingCandidate,
 } from '../types/staffing';
 import { db } from '../lib/supabaseSync';
 import { CLIENT_ID } from '../lib/supabase';
@@ -115,6 +116,7 @@ interface StaffingState {
   requisitions: StaffingRequisition[];
   statuses: DailyStatus[];
   history: StaffingHistoryEntry[];
+  candidates: StaffingCandidate[];
 
   addAccount: (name: string) => StaffingAccount;
   removeAccount: (id: string) => void;
@@ -125,6 +127,12 @@ interface StaffingState {
 
   addStatus: (s: Omit<DailyStatus, 'id' | 'created_at'>) => DailyStatus;
   removeStatus: (id: string) => void;
+
+  addCandidate: (c: Omit<StaffingCandidate, 'id' | 'created_at' | 'updated_at'>) => StaffingCandidate;
+  updateCandidate: (id: string, patch: Partial<StaffingCandidate>) => void;
+  removeCandidate: (id: string) => void;
+  /** Get all candidates for a specific requisition, newest first. */
+  candidatesFor: (requisitionId: string) => StaffingCandidate[];
 
   /** Read-only helper: get history rows for a specific requisition, newest first. */
   historyFor: (requisitionId: string) => StaffingHistoryEntry[];
@@ -141,6 +149,7 @@ interface StaffingState {
     requisitions: StaffingRequisition[],
     statuses: DailyStatus[],
     history?: StaffingHistoryEntry[],
+    candidates?: StaffingCandidate[],
   ) => void;
 }
 
@@ -151,6 +160,7 @@ export const useStaffingStore = create<StaffingState>()(
       requisitions: SEED_REQS,
       statuses: SEED_STATUSES,
       history: [],
+      candidates: [],
 
       addAccount: (name) => {
         const acct: StaffingAccount = { id: nanoid(), name, created_at: new Date().toISOString() };
@@ -222,6 +232,7 @@ export const useStaffingStore = create<StaffingState>()(
         set((s) => ({
           requisitions: s.requisitions.filter((r) => r.id !== id),
           statuses: s.statuses.filter((st) => st.requisition_id !== id),
+          candidates: s.candidates.filter((c) => c.requisition_id !== id),
           // keep history entries so deletions remain auditable
         }));
         db.deleteIndiaRequisition(id);
@@ -271,6 +282,39 @@ export const useStaffingStore = create<StaffingState>()(
         get().history
           .filter((h) => h.requisition_id === requisitionId)
           .sort((a, b) => b.changed_at.localeCompare(a.changed_at)),
+
+      addCandidate: (input) => {
+        const now = new Date().toISOString();
+        const c: StaffingCandidate = {
+          ...input,
+          id: nanoid(),
+          created_at: now,
+          updated_at: now,
+        };
+        set((s) => ({ candidates: [...s.candidates, c] }));
+        db.upsertIndiaCandidate(c);
+        return c;
+      },
+
+      updateCandidate: (id, patch) => {
+        set((s) => ({
+          candidates: s.candidates.map((c) =>
+            c.id === id ? { ...c, ...patch, updated_at: new Date().toISOString() } : c,
+          ),
+        }));
+        const updated = get().candidates.find((c) => c.id === id);
+        if (updated) db.upsertIndiaCandidate(updated);
+      },
+
+      removeCandidate: (id) => {
+        set((s) => ({ candidates: s.candidates.filter((c) => c.id !== id) }));
+        db.deleteIndiaCandidate(id);
+      },
+
+      candidatesFor: (requisitionId) =>
+        get().candidates
+          .filter((c) => c.requisition_id === requisitionId)
+          .sort((a, b) => b.created_at.localeCompare(a.created_at)),
 
       importRows: (rows) => {
         const state = get();
@@ -349,14 +393,21 @@ export const useStaffingStore = create<StaffingState>()(
         return { imported, errors };
       },
 
-      _setFromSupabase: (accounts, requisitions, statuses, history) =>
-        set({ accounts, requisitions, statuses, ...(history ? { history } : {}) }),
+      _setFromSupabase: (accounts, requisitions, statuses, history, candidates) =>
+        set({
+          accounts,
+          requisitions,
+          statuses,
+          ...(history ? { history } : {}),
+          ...(candidates ? { candidates } : {}),
+        }),
     }),
     {
       name: 'simpliigence-staffing',
-      version: 6,
+      version: 7,
       // NON-DESTRUCTIVE migrate: preserves every existing requisition/status/account;
       // only fills in new fields with safe defaults and bumps 2025 → 2026 on date fields.
+      // v7 adds `candidates` field — defaults to [].
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       migrate: (persisted: any) => {
         if (!persisted) {
@@ -365,6 +416,7 @@ export const useStaffingStore = create<StaffingState>()(
             requisitions: SEED_REQS,
             statuses: SEED_STATUSES,
             history: [],
+            candidates: [],
           };
         }
         const bumpYear = (d: string | undefined | null) =>
@@ -395,6 +447,7 @@ export const useStaffingStore = create<StaffingState>()(
           requisitions: upgradedReqs,
           statuses: upgradedStatuses,
           history: persisted.history || [],
+          candidates: persisted.candidates || [],
         };
       },
     },

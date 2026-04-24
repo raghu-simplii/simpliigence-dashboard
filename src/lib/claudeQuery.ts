@@ -625,11 +625,12 @@ export interface StaffingQueryInput {
   requisitions: StaffingRequisition[];
   statuses: DailyStatus[];
   history: StaffingHistoryEntry[];
+  candidates?: import('../types/staffing').StaffingCandidate[];
 }
 
 /** Compact JSON payload used for the Smart Query context. */
 function buildStaffingQueryContext(input: StaffingQueryInput) {
-  const { accounts, requisitions, statuses, history } = input;
+  const { accounts, requisitions, statuses, history, candidates = [] } = input;
   const acctName = (id: string) => accounts.find((a) => a.id === id)?.name || 'Unknown';
 
   const reqs = requisitions.map((r) => {
@@ -637,6 +638,7 @@ function buildStaffingQueryContext(input: StaffingQueryInput) {
     const reqStatuses = statuses
       .filter((s) => s.requisition_id === r.id)
       .sort((a, b) => b.status_date.localeCompare(a.status_date));
+    const reqCandidates = candidates.filter((c) => c.requisition_id === r.id);
     return {
       id: r.id,
       account: acctName(r.account_id),
@@ -658,6 +660,11 @@ function buildStaffingQueryContext(input: StaffingQueryInput) {
       clientSpoc: r.client_spoc || null,
       department: r.department || null,
       anticipation: r.anticipation || null,
+      candidateCount: reqCandidates.length,
+      candidatesByStage: reqCandidates.reduce<Record<string, number>>((acc, c) => {
+        acc[c.stage] = (acc[c.stage] || 0) + 1;
+        return acc;
+      }, {}),
       latestStatus: reqStatuses[0]
         ? { date: reqStatuses[0].status_date, text: reqStatuses[0].status_text }
         : null,

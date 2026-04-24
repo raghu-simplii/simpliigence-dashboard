@@ -161,8 +161,9 @@ function useSupabaseInit() {
               requisitions: id.requisitions,
               statuses: id.statuses,
               history: id.history || [],
+              candidates: id.candidates || [],
             });
-            console.log('[supabase] Loaded india staffing:', id.accounts.length, 'accounts,', id.requisitions.length, 'reqs,', (id.history || []).length, 'history entries');
+            console.log('[supabase] Loaded india staffing:', id.accounts.length, 'accounts,', id.requisitions.length, 'reqs,', (id.history || []).length, 'history entries,', (id.candidates || []).length, 'candidates');
           } else {
             // Supabase empty — push local/seed data
             const local = useStaffingStore.getState();
@@ -218,8 +219,14 @@ function useSupabaseInit() {
           setPipelineProjects: (projects) => {
             usePipelineStore.setState({ projects });
           },
-          setIndiaStaffing: (accounts, requisitions, statuses) => {
-            useStaffingStore.setState({ accounts, requisitions, statuses });
+          setIndiaStaffing: (accounts, requisitions, statuses, history, candidates) => {
+            useStaffingStore.setState({
+              accounts,
+              requisitions,
+              statuses,
+              ...(history ? { history } : {}),
+              ...(candidates ? { candidates } : {}),
+            });
           },
           setUSStaffing: (accounts, requisitions) => {
             useUSStaffingStore.setState({ accounts, requisitions });

@@ -13,7 +13,7 @@ import type { ForecastAssignment, Month, ZohoPipelineProject } from '../types/fo
 import type { FinancialSettings } from '../types/financial';
 import type { ConciergeConfig, ScenarioSettings, StaffingRequest } from '../types/hiringForecast';
 import { emptyMonthRecord } from '../types/forecast';
-import type { StaffingAccount as IndiaAccount, StaffingRequisition as IndiaRequisition, DailyStatus, StaffingHistoryEntry } from '../types/staffing';
+import type { StaffingAccount as IndiaAccount, StaffingRequisition as IndiaRequisition, DailyStatus, StaffingHistoryEntry, StaffingCandidate } from '../types/staffing';
 import type { USStaffingAccount, USStaffingRequisition, AccountCategory } from '../types/usStaffing';
 
 // ─── Conversion helpers ────────────────────────────────────────────
@@ -160,6 +160,41 @@ function rowToIndiaReq(row: any): IndiaRequisition {
   };
 }
 
+function candidateToRow(c: StaffingCandidate) {
+  return {
+    id: c.id,
+    requisition_id: c.requisition_id,
+    name: c.name,
+    experience: c.experience,
+    stage: c.stage,
+    submit_date: c.submit_date,
+    feedback: c.feedback,
+    source: c.source,
+    email: c.email,
+    phone: c.phone,
+    created_at: c.created_at,
+    updated_at: c.updated_at,
+    updated_by: CLIENT_ID,
+  };
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToCandidate(row: any): StaffingCandidate {
+  return {
+    id: row.id,
+    requisition_id: row.requisition_id,
+    name: row.name,
+    experience: row.experience ?? '',
+    stage: row.stage ?? 'Submitted',
+    submit_date: row.submit_date ?? '',
+    feedback: row.feedback ?? '',
+    source: row.source ?? '',
+    email: row.email ?? '',
+    phone: row.phone ?? '',
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
 function historyToRow(h: StaffingHistoryEntry) {
   return {
     id: h.id,
@@ -292,26 +327,36 @@ export async function fetchPipelineProjects(): Promise<ZohoPipelineProject[] | n
 
 // ─── India Staffing fetchers ──────────────────────────────────────
 
-export async function fetchIndiaStaffing(): Promise<{ accounts: IndiaAccount[]; requisitions: IndiaRequisition[]; statuses: DailyStatus[]; history: StaffingHistoryEntry[] } | null> {
-  const [acctRes, reqRes, statusRes, histRes] = await Promise.all([
+export async function fetchIndiaStaffing(): Promise<{
+  accounts: IndiaAccount[];
+  requisitions: IndiaRequisition[];
+  statuses: DailyStatus[];
+  history: StaffingHistoryEntry[];
+  candidates: StaffingCandidate[];
+} | null> {
+  const [acctRes, reqRes, statusRes, histRes, candRes] = await Promise.all([
     supabase.from('india_staffing_accounts').select('*'),
     supabase.from('india_staffing_requisitions').select('*'),
     supabase.from('india_staffing_statuses').select('*'),
     supabase.from('india_staffing_history').select('*'),
+    supabase.from('india_staffing_candidates').select('*'),
   ]);
   if (acctRes.error || reqRes.error || statusRes.error) {
     console.warn('[supabase] fetch india staffing failed:', acctRes.error?.message, reqRes.error?.message, statusRes.error?.message);
     return null;
   }
   if (histRes.error) {
-    // History table may not exist yet on older deployments — don't fail the whole fetch
     console.warn('[supabase] fetch india history failed (table may be missing):', histRes.error.message);
+  }
+  if (candRes.error) {
+    console.warn('[supabase] fetch india candidates failed (table may be missing):', candRes.error.message);
   }
   return {
     accounts: (acctRes.data || []).map(rowToIndiaAccount),
     requisitions: (reqRes.data || []).map(rowToIndiaReq),
     statuses: (statusRes.data || []).map(rowToDailyStatus),
     history: (histRes.data || []).map(rowToHistory),
+    candidates: (candRes.data || []).map(rowToCandidate),
   };
 }
 
@@ -518,6 +563,14 @@ export const db = {
     const { error } = await supabase.from('india_staffing_history').insert(entries.map(historyToRow));
     if (error) console.warn('[supabase] insert india history failed:', error);
   },
+  async upsertIndiaCandidate(c: StaffingCandidate) {
+    const { error } = await supabase.from('india_staffing_candidates').upsert(candidateToRow(c), { onConflict: 'id' });
+    if (error) console.warn('[supabase] upsert india candidate failed:', error);
+  },
+  async deleteIndiaCandidate(id: string) {
+    const { error } = await supabase.from('india_staffing_candidates').delete().eq('id', id);
+    if (error) console.warn('[supabase] delete india candidate failed:', error);
+  },
   async replaceAllIndiaStaffing(accounts: IndiaAccount[], requisitions: IndiaRequisition[], statuses: DailyStatus[]) {
     await Promise.all([
       supabase.from('india_staffing_statuses').delete().neq('id', ''),
@@ -576,6 +629,7 @@ export const db = {
       }),
       supabase.from('staffing_requests').delete().neq('id', ''),
       supabase.from('pipeline_projects').delete().neq('id', ''),
+      supabase.from('india_staffing_candidates').delete().neq('id', ''),
       supabase.from('india_staffing_history').delete().neq('id', ''),
       supabase.from('india_staffing_statuses').delete().neq('id', ''),
       supabase.from('india_staffing_requisitions').delete().neq('id', ''),
@@ -594,7 +648,7 @@ type StoreSetters = {
   setSyncConfig: (c: Record<string, unknown>) => void;
   setHiringConfig: (concierge: ConciergeConfig, scenario: ScenarioSettings, requests: StaffingRequest[]) => void;
   setPipelineProjects: (p: ZohoPipelineProject[]) => void;
-  setIndiaStaffing: (accounts: IndiaAccount[], requisitions: IndiaRequisition[], statuses: DailyStatus[], history?: StaffingHistoryEntry[]) => void;
+  setIndiaStaffing: (accounts: IndiaAccount[], requisitions: IndiaRequisition[], statuses: DailyStatus[], history?: StaffingHistoryEntry[], candidates?: StaffingCandidate[]) => void;
   setUSStaffing: (accounts: USStaffingAccount[], requisitions: USStaffingRequisition[]) => void;
   getForecastAssignments: () => ForecastAssignment[];
   getStaffingRequests: () => StaffingRequest[];
@@ -745,7 +799,7 @@ export function setupRealtimeSubscriptions(setters: StoreSetters) {
   );
 
   // --- India Staffing (refetch all on any change) ---
-  for (const table of ['india_staffing_accounts', 'india_staffing_requisitions', 'india_staffing_statuses', 'india_staffing_history'] as const) {
+  for (const table of ['india_staffing_accounts', 'india_staffing_requisitions', 'india_staffing_statuses', 'india_staffing_history', 'india_staffing_candidates'] as const) {
     channel.on(
       'postgres_changes',
       { event: '*', schema: 'public', table },
@@ -754,7 +808,7 @@ export function setupRealtimeSubscriptions(setters: StoreSetters) {
         const row = (payload.new || payload.old) as any;
         if (row?.updated_by === CLIENT_ID) return;
         fetchIndiaStaffing().then((data) => {
-          if (data) setters.setIndiaStaffing(data.accounts, data.requisitions, data.statuses, data.history);
+          if (data) setters.setIndiaStaffing(data.accounts, data.requisitions, data.statuses, data.history, data.candidates);
         });
       },
     );

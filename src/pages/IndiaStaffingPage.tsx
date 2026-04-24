@@ -13,6 +13,7 @@ import { runStaffingBriefing, type StaffingBriefing } from '../lib/claudeQuery';
 import { StaffingKanban } from '../components/staffing/StaffingKanban';
 import { StageFunnel } from '../components/staffing/StageFunnel';
 import { StaffingSmartQuery } from '../components/staffing/StaffingSmartQuery';
+import { CandidatePipeline } from '../components/staffing/CandidatePipeline';
 import { PageHeader } from '../components/shared/PageHeader';
 import { Card, StatCard, StatusBadge } from '../components/ui';
 import type { StaffingRow, RiskLevel, PipelineStage, StaffingStatus } from '../types/staffing';
@@ -101,7 +102,7 @@ function EditableCell({ value, onSave, type = 'text', options, className = '', d
 
 
 export default function IndiaStaffingPage() {
-  const { accounts, requisitions, statuses, history, addRequisition, addStatus, addAccount, updateRequisition, removeRequisition, removeStatus, importRows, historyFor } = useStaffingStore();
+  const { accounts, requisitions, statuses, history, candidates, addRequisition, addStatus, addAccount, updateRequisition, removeRequisition, removeStatus, importRows, historyFor, addCandidate, updateCandidate, removeCandidate, candidatesFor } = useStaffingStore();
 
   const [monthFilter, setMonthFilter] = useState('all');
   const [accountFilter, setAccountFilter] = useState('all');
@@ -572,6 +573,17 @@ export default function IndiaStaffingPage() {
                   </div>
                 </div>
 
+                {/* Candidate pipeline for this req */}
+                <div className="border-t border-slate-200 pt-3">
+                  <CandidatePipeline
+                    requisitionId={r.id}
+                    candidates={candidatesFor(r.id)}
+                    onAdd={addCandidate}
+                    onUpdate={updateCandidate}
+                    onRemove={removeCandidate}
+                  />
+                </div>
+
                 {/* Audit log */}
                 <div className="border-t border-slate-200 pt-3">
                   <div className="flex items-center gap-2 mb-2">
@@ -727,7 +739,7 @@ export default function IndiaStaffingPage() {
       </div>
 
       {/* Smart Query — natural-language Q&A over the full staffing data */}
-      <StaffingSmartQuery input={{ accounts, requisitions, statuses, history }} />
+      <StaffingSmartQuery input={{ accounts, requisitions, statuses, history, candidates }} />
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-6">
