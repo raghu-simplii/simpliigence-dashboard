@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { nanoid } from 'nanoid';
-import type { BenchResource } from '../types/openBench';
+import type { BenchResource, BenchUpdate } from '../types/openBench';
 
 /* —— Seed data —— */
 const SEED_RESOURCES: BenchResource[] = [
@@ -16,16 +16,26 @@ const SEED_RESOURCES: BenchResource[] = [
 /* —— Store —— */
 interface OpenBenchState {
   resources: BenchResource[];
+  /** Daily updates / submissions / notes per bench resource. */
+  updates: BenchUpdate[];
 
   addResource: (res: Omit<BenchResource, 'id' | 'created_at' | 'updated_at'>) => BenchResource;
   updateResource: (id: string, patch: Partial<BenchResource>) => void;
   removeResource: (id: string) => void;
+
+  /** Add a recruiter update against a bench resource. */
+  addUpdate: (u: Omit<BenchUpdate, 'id' | 'created_at'>) => BenchUpdate;
+  updateUpdate: (id: string, patch: Partial<BenchUpdate>) => void;
+  removeUpdate: (id: string) => void;
+  /** Get updates for a specific resource, newest first. */
+  updatesFor: (resourceId: string) => BenchUpdate[];
 }
 
 export const useOpenBenchStore = create<OpenBenchState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       resources: SEED_RESOURCES,
+      updates: [],
 
       addResource: (res) => {
         const now = new Date().toISOString();
@@ -42,8 +52,57 @@ export const useOpenBenchStore = create<OpenBenchState>()(
         })),
 
       removeResource: (id) =>
-        set((s) => ({ resources: s.resources.filter((r) => r.id !== id) })),
+        set((s) => ({
+          resources: s.resources.filter((r) => r.id !== id),
+          // Cascade delete any updates tied to this resource so localStorage doesn't bloat
+          updates: s.updates.filter((u) => u.resource_id !== id),
+        })),
+
+      addUpdate: (input) => {
+        const u: BenchUpdate = {
+          ...input,
+          id: nanoid(),
+          created_at: new Date().toISOString(),
+        };
+        set((s) => ({ updates: [...s.updates, u] }));
+        // Bump the resource's updated_at so "most recently updated" sort works
+        set((s) => ({
+          resources: s.resources.map((r) =>
+            r.id === input.resource_id ? { ...r, updated_at: u.created_at } : r,
+          ),
+        }));
+        return u;
+      },
+
+      updateUpdate: (id, patch) =>
+        set((s) => ({
+          updates: s.updates.map((u) => (u.id === id ? { ...u, ...patch } : u)),
+        })),
+
+      removeUpdate: (id) =>
+        set((s) => ({ updates: s.updates.filter((u) => u.id !== id) })),
+
+      updatesFor: (resourceId) =>
+        get().updates
+          .filter((u) => u.resource_id === resourceId)
+          .sort((a, b) => {
+            // newest first by update_date, tiebreak by created_at
+            const d = b.update_date.localeCompare(a.update_date);
+            return d !== 0 ? d : b.created_at.localeCompare(a.created_at);
+          }),
     }),
-    { name: 'simpliigence-open-bench', version: 2 },
+    {
+      name: 'simpliigence-open-bench',
+      version: 3,
+      // v3 adds `updates` field — non-destructive: existing resources are preserved.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      migrate: (persisted: any) => {
+        if (!persisted) return { resources: SEED_RESOURCES, updates: [] };
+        return {
+          resources: persisted.resources || SEED_RESOURCES,
+          updates: persisted.updates || [],
+        };
+      },
+    },
   ),
 );

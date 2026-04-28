@@ -1,13 +1,14 @@
 // @ts-nocheck
-import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import {
   Users, Plus, Trash2, Pencil, UserCheck, DollarSign,
-  Briefcase, Shield, Search, Filter,
+  Briefcase, Shield, Search, Filter, ChevronDown, ChevronRight, MessageSquarePlus, Send,
 } from 'lucide-react';
 import { useOpenBenchStore } from '../store/useOpenBenchStore';
 import { PageHeader } from '../components/shared/PageHeader';
 import { Card, StatCard } from '../components/ui';
-import type { VisaCategory, JobPriority } from '../types/openBench';
+import type { VisaCategory, JobPriority, BenchUpdateType } from '../types/openBench';
+import { BENCH_UPDATE_TYPES, BENCH_UPDATE_TYPE_COLORS } from '../types/openBench';
 
 /* —— Editable Cell Component —— */
 function EditableCell({ value, onSave, type = 'text', options, className = '', displayContent }: {
@@ -89,7 +90,60 @@ const VISA_COLORS: Record<string, string> = {
 
 /* —— Main Component —— */
 export default function OpenBenchPage() {
-  const { resources, addResource, updateResource, removeResource } = useOpenBenchStore();
+  const { resources, updates, addResource, updateResource, removeResource, addUpdate, removeUpdate, updatesFor } = useOpenBenchStore();
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  // Inline "Add update" draft state, keyed by resource id so each row keeps
+  // its own in-flight values without leaking across rows.
+  const [draftUpdate, setDraftUpdate] = useState<Record<string, {
+    update_date: string;
+    type: BenchUpdateType;
+    update_text: string;
+    client_or_role: string;
+    recruiter: string;
+  }>>({});
+
+  const getDraft = (resId: string) => draftUpdate[resId] || {
+    update_date: todayStr,
+    type: 'Submission' as BenchUpdateType,
+    update_text: '',
+    client_or_role: '',
+    recruiter: '',
+  };
+
+  const setDraftField = (resId: string, field: string, val: string) => {
+    setDraftUpdate((prev) => ({
+      ...prev,
+      [resId]: { ...getDraft(resId), [field]: val },
+    }));
+  };
+
+  const submitDraft = (resId: string) => {
+    const draft = getDraft(resId);
+    if (!draft.update_text.trim()) return;
+    addUpdate({
+      resource_id: resId,
+      update_date: draft.update_date || todayStr,
+      type: draft.type,
+      update_text: draft.update_text.trim(),
+      client_or_role: draft.client_or_role.trim(),
+      recruiter: draft.recruiter.trim(),
+    });
+    // Reset draft for this row but keep recruiter name (rare to switch mid-session)
+    setDraftUpdate((prev) => ({
+      ...prev,
+      [resId]: { ...getDraft(resId), update_text: '', client_or_role: '', update_date: todayStr },
+    }));
+  };
+
+  const toggleRow = (id: string) =>
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -343,6 +397,7 @@ export default function OpenBenchPage() {
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-slate-50 text-slate-500 uppercase tracking-wider">
+                <th className="w-6 px-1 py-2"></th>
                 <SortHeader field="resource_name" label="Resource Name" />
                 <SortHeader field="years_of_experience" label="YOE" />
                 <SortHeader field="visa_category" label="Visa" />
@@ -353,12 +408,30 @@ export default function OpenBenchPage() {
                 <SortHeader field="location" label="Location" />
                 <th className="px-3 py-2 text-left font-semibold">Key Opportunities</th>
                 <th className="px-3 py-2 text-left font-semibold">Notes</th>
+                <th className="px-3 py-2 text-left font-semibold min-w-[200px]" title="Most recent recruiter update / submission. Click row arrow to expand the full log.">
+                  Latest Update
+                </th>
                 <th className="px-3 py-2 text-center font-semibold w-16">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredResources.map(r => (
-                <tr key={r.id} className="border-t border-slate-100 hover:bg-blue-50/30">
+              {filteredResources.map(r => {
+                const isExpanded = expandedRows.has(r.id);
+                const resourceUpdates = updatesFor(r.id);
+                const latest = resourceUpdates[0];
+                const draft = getDraft(r.id);
+                return (
+                <React.Fragment key={r.id}>
+                <tr className="border-t border-slate-100 hover:bg-blue-50/30">
+                  <td className="px-1 py-2 text-center">
+                    <button
+                      onClick={() => toggleRow(r.id)}
+                      className="p-0.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+                      title={`${resourceUpdates.length} update${resourceUpdates.length === 1 ? '' : 's'}. Click to ${isExpanded ? 'collapse' : 'expand'}.`}
+                    >
+                      {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                    </button>
+                  </td>
                   <td className="px-3 py-2 font-medium text-slate-800">
                     <EditableCell value={r.resource_name} onSave={v => handleCellSave(r.id, 'resource_name', v)} />
                   </td>
@@ -408,15 +481,173 @@ export default function OpenBenchPage() {
                   <td className="px-3 py-2 max-w-[160px]">
                     <EditableCell value={r.notes} type="textarea" onSave={v => handleCellSave(r.id, 'notes', v)} />
                   </td>
+                  {/* Latest Update preview cell — clicking expands the row */}
+                  <td className="px-3 py-2 max-w-[220px]">
+                    {latest ? (
+                      <button
+                        onClick={() => toggleRow(r.id)}
+                        className="text-left w-full group"
+                        title={latest.update_text}
+                      >
+                        <div className="flex items-center gap-1 mb-0.5">
+                          <span
+                            className="text-[9px] font-bold text-white px-1.5 py-0.5 rounded uppercase tracking-wide"
+                            style={{ background: BENCH_UPDATE_TYPE_COLORS[latest.type] || '#94a3b8' }}
+                          >
+                            {latest.type}
+                          </span>
+                          <span className="text-[10px] text-slate-400">{latest.update_date}</span>
+                          {resourceUpdates.length > 1 && (
+                            <span className="text-[9px] text-slate-400">+{resourceUpdates.length - 1}</span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-slate-600 truncate group-hover:text-slate-900">
+                          {latest.client_or_role && (
+                            <span className="font-semibold">{latest.client_or_role}: </span>
+                          )}
+                          {latest.update_text}
+                        </div>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => toggleRow(r.id)}
+                        className="text-[10px] text-blue-500 hover:text-blue-700 italic flex items-center gap-1"
+                      >
+                        <MessageSquarePlus size={11} /> Add first update
+                      </button>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-center">
                     <button onClick={() => removeResource(r.id)} className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded" title="Remove from bench">
                       <Trash2 size={14} />
                     </button>
                   </td>
                 </tr>
-              ))}
+
+                {/* Expanded — full update log + add form */}
+                {isExpanded && (
+                  <tr key={`${r.id}-exp`}>
+                    <td colSpan={13} className="bg-blue-50/30 p-0">
+                      <div className="px-8 py-3 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <MessageSquarePlus size={12} className="text-blue-500" />
+                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                            Daily Updates &amp; Submissions ({resourceUpdates.length})
+                          </span>
+                        </div>
+
+                        {/* Existing updates — newest first */}
+                        {resourceUpdates.length === 0 && (
+                          <p className="text-xs text-slate-400 italic">
+                            No updates yet. Use the form below to log a submission, interview, feedback, or note.
+                          </p>
+                        )}
+                        <div className="space-y-1.5 max-h-72 overflow-y-auto">
+                          {resourceUpdates.map((u) => (
+                            <div key={u.id} className="flex items-start gap-2 group bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 hover:border-blue-300 transition-colors">
+                              <span
+                                className="text-[9px] font-bold text-white px-1.5 py-0.5 rounded uppercase tracking-wide flex-shrink-0 mt-0.5"
+                                style={{ background: BENCH_UPDATE_TYPE_COLORS[u.type] || '#94a3b8' }}
+                              >
+                                {u.type}
+                              </span>
+                              <span className="text-slate-400 font-mono text-[10px] flex-shrink-0 mt-0.5 w-20">
+                                {u.update_date}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                {u.client_or_role && (
+                                  <div className="text-[10px] font-semibold text-slate-700">
+                                    {u.client_or_role}
+                                  </div>
+                                )}
+                                <div className="text-[11px] text-slate-700">{u.update_text}</div>
+                              </div>
+                              {u.recruiter && (
+                                <span className="text-[10px] text-slate-400 italic flex-shrink-0 mt-0.5">
+                                  — {u.recruiter}
+                                </span>
+                              )}
+                              <button
+                                onClick={() => { if (confirm('Delete this update?')) removeUpdate(u.id); }}
+                                className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 transition-all flex-shrink-0"
+                                title="Delete update"
+                              >
+                                <Trash2 size={10} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Add form */}
+                        <div className="bg-white border border-slate-200 rounded-lg p-2.5">
+                          <div className="grid grid-cols-12 gap-2 mb-2">
+                            <div className="col-span-2">
+                              <label className="block text-[9px] uppercase text-slate-400 font-semibold mb-0.5">Type</label>
+                              <select
+                                value={draft.type}
+                                onChange={(e) => setDraftField(r.id, 'type', e.target.value)}
+                                className="w-full text-[11px] border border-slate-200 rounded px-1.5 py-1 bg-white"
+                              >
+                                {BENCH_UPDATE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                              </select>
+                            </div>
+                            <div className="col-span-2">
+                              <label className="block text-[9px] uppercase text-slate-400 font-semibold mb-0.5">Date</label>
+                              <input
+                                type="date"
+                                value={draft.update_date}
+                                onChange={(e) => setDraftField(r.id, 'update_date', e.target.value)}
+                                className="w-full text-[11px] border border-slate-200 rounded px-1.5 py-1 bg-white"
+                              />
+                            </div>
+                            <div className="col-span-3">
+                              <label className="block text-[9px] uppercase text-slate-400 font-semibold mb-0.5">Client / Role <span className="text-slate-300 normal-case">optional</span></label>
+                              <input
+                                value={draft.client_or_role}
+                                onChange={(e) => setDraftField(r.id, 'client_or_role', e.target.value)}
+                                placeholder="e.g. TEKsystems Java"
+                                className="w-full text-[11px] border border-slate-200 rounded px-1.5 py-1 bg-white"
+                              />
+                            </div>
+                            <div className="col-span-2">
+                              <label className="block text-[9px] uppercase text-slate-400 font-semibold mb-0.5">Recruiter <span className="text-slate-300 normal-case">optional</span></label>
+                              <input
+                                value={draft.recruiter}
+                                onChange={(e) => setDraftField(r.id, 'recruiter', e.target.value)}
+                                placeholder="Name"
+                                className="w-full text-[11px] border border-slate-200 rounded px-1.5 py-1 bg-white"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex items-end gap-2">
+                            <div className="flex-1">
+                              <label className="block text-[9px] uppercase text-slate-400 font-semibold mb-0.5">Update / Note</label>
+                              <input
+                                value={draft.update_text}
+                                onChange={(e) => setDraftField(r.id, 'update_text', e.target.value)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') submitDraft(r.id); }}
+                                placeholder="e.g. Submitted to TEKsystems for SF Architect role at $80/hr"
+                                className="w-full text-[11px] border border-slate-200 rounded px-2 py-1.5 bg-white focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                              />
+                            </div>
+                            <button
+                              onClick={() => submitDraft(r.id)}
+                              disabled={!draft.update_text.trim()}
+                              className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-semibold rounded-lg bg-primary text-white hover:bg-primary/90 disabled:opacity-40"
+                            >
+                              <Send size={11} /> Log
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
+                );
+              })}
               {filteredResources.length === 0 && (
-                <tr><td colSpan={11} className="px-3 py-8 text-center text-slate-400">No resources found matching filters</td></tr>
+                <tr><td colSpan={13} className="px-3 py-8 text-center text-slate-400">No resources found matching filters</td></tr>
               )}
             </tbody>
           </table>
