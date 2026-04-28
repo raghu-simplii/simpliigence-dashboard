@@ -15,6 +15,7 @@ import type { ConciergeConfig, ScenarioSettings, StaffingRequest } from '../type
 import { emptyMonthRecord } from '../types/forecast';
 import type { StaffingAccount as IndiaAccount, StaffingRequisition as IndiaRequisition, DailyStatus, StaffingHistoryEntry, StaffingCandidate } from '../types/staffing';
 import type { USStaffingAccount, USStaffingRequisition, AccountCategory } from '../types/usStaffing';
+import type { BenchResource, BenchUpdate, VisaCategory, JobPriority, BenchUpdateType } from '../types/openBench';
 
 // ─── Conversion helpers ────────────────────────────────────────────
 
@@ -360,6 +361,74 @@ export async function fetchIndiaStaffing(): Promise<{
   };
 }
 
+// ─── Open Bench converters ────────────────────────────────────────
+
+function benchResourceToRow(r: BenchResource) {
+  return {
+    id: r.id,
+    resource_name: r.resource_name,
+    years_of_experience: r.years_of_experience,
+    visa_category: r.visa_category,
+    primary_skill: r.primary_skill,
+    roles: r.roles,
+    job_priority: r.job_priority,
+    target_rate: r.target_rate,
+    location: r.location,
+    key_opportunities: r.key_opportunities,
+    notes: r.notes,
+    available: r.available,
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+    updated_by: CLIENT_ID,
+  };
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToBenchResource(row: any): BenchResource {
+  return {
+    id: row.id,
+    resource_name: row.resource_name ?? '',
+    years_of_experience: row.years_of_experience ?? 0,
+    visa_category: (row.visa_category ?? 'Other') as VisaCategory,
+    primary_skill: row.primary_skill ?? '',
+    roles: row.roles ?? '',
+    job_priority: (row.job_priority ?? 'Primary') as JobPriority,
+    target_rate: row.target_rate ?? 0,
+    location: row.location ?? '',
+    key_opportunities: row.key_opportunities ?? '',
+    notes: row.notes ?? '',
+    available: row.available ?? true,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+function benchUpdateToRow(u: BenchUpdate) {
+  return {
+    id: u.id,
+    resource_id: u.resource_id,
+    update_date: u.update_date,
+    update_text: u.update_text,
+    type: u.type,
+    client_or_role: u.client_or_role,
+    recruiter: u.recruiter,
+    created_at: u.created_at,
+    updated_by: CLIENT_ID,
+  };
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToBenchUpdate(row: any): BenchUpdate {
+  return {
+    id: row.id,
+    resource_id: row.resource_id,
+    update_date: row.update_date ?? '',
+    update_text: row.update_text ?? '',
+    type: (row.type ?? 'Note') as BenchUpdateType,
+    client_or_role: row.client_or_role ?? '',
+    recruiter: row.recruiter ?? '',
+    created_at: row.created_at,
+  };
+}
+
 // ─── US Staffing fetchers ─────────────────────────────────────────
 
 export async function fetchUSStaffing(): Promise<{ accounts: USStaffingAccount[]; requisitions: USStaffingRequisition[] } | null> {
@@ -374,6 +443,26 @@ export async function fetchUSStaffing(): Promise<{ accounts: USStaffingAccount[]
   return {
     accounts: (acctRes.data || []).map(rowToUSAccount),
     requisitions: (reqRes.data || []).map(rowToUSReq),
+  };
+}
+
+// ─── Open Bench fetcher ──────────────────────────────────────────
+
+export async function fetchOpenBench(): Promise<{ resources: BenchResource[]; updates: BenchUpdate[] } | null> {
+  const [resRes, upRes] = await Promise.all([
+    supabase.from('open_bench_resources').select('*'),
+    supabase.from('open_bench_updates').select('*'),
+  ]);
+  if (resRes.error) {
+    console.warn('[supabase] fetch open_bench_resources failed (table may be missing):', resRes.error.message);
+    return null;
+  }
+  if (upRes.error) {
+    console.warn('[supabase] fetch open_bench_updates failed (table may be missing):', upRes.error.message);
+  }
+  return {
+    resources: (resRes.data || []).map(rowToBenchResource),
+    updates: (upRes.data || []).map(rowToBenchUpdate),
   };
 }
 
@@ -610,6 +699,34 @@ export const db = {
     if (requisitions.length) await supabase.from('us_staffing_requisitions').insert(requisitions.map(usReqToRow));
   },
 
+  // --- Open Bench ---
+  async upsertOpenBenchResource(r: BenchResource) {
+    const { error } = await supabase.from('open_bench_resources').upsert(benchResourceToRow(r), { onConflict: 'id' });
+    if (error) console.warn('[supabase] upsert open bench resource failed:', error);
+  },
+  async deleteOpenBenchResource(id: string) {
+    await Promise.all([
+      supabase.from('open_bench_updates').delete().eq('resource_id', id),
+      supabase.from('open_bench_resources').delete().eq('id', id),
+    ]);
+  },
+  async upsertOpenBenchUpdate(u: BenchUpdate) {
+    const { error } = await supabase.from('open_bench_updates').upsert(benchUpdateToRow(u), { onConflict: 'id' });
+    if (error) console.warn('[supabase] upsert open bench update failed:', error);
+  },
+  async deleteOpenBenchUpdate(id: string) {
+    const { error } = await supabase.from('open_bench_updates').delete().eq('id', id);
+    if (error) console.warn('[supabase] delete open bench update failed:', error);
+  },
+  async replaceAllOpenBench(resources: BenchResource[], updates: BenchUpdate[]) {
+    await Promise.all([
+      supabase.from('open_bench_updates').delete().neq('id', ''),
+      supabase.from('open_bench_resources').delete().neq('id', ''),
+    ]);
+    if (resources.length) await supabase.from('open_bench_resources').insert(resources.map(benchResourceToRow));
+    if (updates.length) await supabase.from('open_bench_updates').insert(updates.map(benchUpdateToRow));
+  },
+
   /** Clear all tables (for Settings → Clear All Data). */
   async clearAll() {
     await Promise.all([
@@ -636,6 +753,8 @@ export const db = {
       supabase.from('india_staffing_accounts').delete().neq('id', ''),
       supabase.from('us_staffing_requisitions').delete().neq('id', ''),
       supabase.from('us_staffing_accounts').delete().neq('id', ''),
+      supabase.from('open_bench_updates').delete().neq('id', ''),
+      supabase.from('open_bench_resources').delete().neq('id', ''),
     ]);
   },
 };
@@ -650,6 +769,7 @@ type StoreSetters = {
   setPipelineProjects: (p: ZohoPipelineProject[]) => void;
   setIndiaStaffing: (accounts: IndiaAccount[], requisitions: IndiaRequisition[], statuses: DailyStatus[], history?: StaffingHistoryEntry[], candidates?: StaffingCandidate[]) => void;
   setUSStaffing: (accounts: USStaffingAccount[], requisitions: USStaffingRequisition[]) => void;
+  setOpenBench: (resources: BenchResource[], updates: BenchUpdate[]) => void;
   getForecastAssignments: () => ForecastAssignment[];
   getStaffingRequests: () => StaffingRequest[];
   getPipelineProjects: () => ZohoPipelineProject[];
@@ -825,6 +945,22 @@ export function setupRealtimeSubscriptions(setters: StoreSetters) {
         if (row?.updated_by === CLIENT_ID) return;
         fetchUSStaffing().then((data) => {
           if (data) setters.setUSStaffing(data.accounts, data.requisitions);
+        });
+      },
+    );
+  }
+
+  // --- Open Bench (refetch on any change) ---
+  for (const table of ['open_bench_resources', 'open_bench_updates'] as const) {
+    channel.on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table },
+      (payload) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const row = (payload.new || payload.old) as any;
+        if (row?.updated_by === CLIENT_ID) return;
+        fetchOpenBench().then((data) => {
+          if (data) setters.setOpenBench(data.resources, data.updates);
         });
       },
     );

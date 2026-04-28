@@ -4,6 +4,7 @@ import { router } from './router';
 import { nanoid } from 'nanoid';
 import { buildSeedAssignments } from './data/employeeSeed';
 import { useForecastStore, useFinancialStore, useSyncStore, useHiringForecastStore, usePipelineStore, useStaffingStore, useUSStaffingStore } from './store';
+import { useOpenBenchStore } from './store/useOpenBenchStore';
 import { ZOHO_SEED_PROJECTS } from './data/zohoSeed';
 import {
   fetchAssignments,
@@ -14,6 +15,7 @@ import {
   fetchPipelineProjects,
   fetchIndiaStaffing,
   fetchUSStaffing,
+  fetchOpenBench,
   setupRealtimeSubscriptions,
   db,
 } from './lib/supabaseSync';
@@ -55,6 +57,7 @@ function useSupabaseInit() {
           pipelineRes,
           indiaStaffingRes,
           usStaffingRes,
+          openBenchRes,
         ] = await Promise.all([
           withTimeout(fetchAssignments()),
           withTimeout(fetchFinancialSettings()),
@@ -64,6 +67,7 @@ function useSupabaseInit() {
           withTimeout(fetchPipelineProjects()),
           withTimeout(fetchIndiaStaffing()),
           withTimeout(fetchUSStaffing()),
+          withTimeout(fetchOpenBench()),
         ]);
 
         // --- Forecast assignments ---
@@ -196,6 +200,26 @@ function useSupabaseInit() {
           console.warn('[supabase] US staffing fetch timed out — using localStorage');
         }
 
+        // --- Open Bench ---
+        if (!openBenchRes.timedOut) {
+          const bd = openBenchRes.value;
+          if (bd && bd.resources.length > 0) {
+            useOpenBenchStore.setState({
+              resources: bd.resources,
+              updates: bd.updates,
+            });
+            console.log('[supabase] Loaded open bench:', bd.resources.length, 'resources,', bd.updates.length, 'updates');
+          } else {
+            const local = useOpenBenchStore.getState();
+            if (local.resources.length > 0) {
+              await db.replaceAllOpenBench(local.resources, local.updates);
+              console.log('[supabase] Seeded open bench to Supabase');
+            }
+          }
+        } else {
+          console.warn('[supabase] Open bench fetch timed out — using localStorage');
+        }
+
         // Set up realtime subscriptions
         cleanup = setupRealtimeSubscriptions({
           setForecastState: (assignments, weekDates) => {
@@ -230,6 +254,9 @@ function useSupabaseInit() {
           },
           setUSStaffing: (accounts, requisitions) => {
             useUSStaffingStore.setState({ accounts, requisitions });
+          },
+          setOpenBench: (resources, updates) => {
+            useOpenBenchStore.setState({ resources, updates });
           },
           getForecastAssignments: () => useForecastStore.getState().assignments,
           getStaffingRequests: () => useHiringForecastStore.getState().staffingRequests,
