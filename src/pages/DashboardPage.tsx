@@ -1,6 +1,16 @@
 import { useMemo, useState, useRef, useCallback } from 'react';
-import { Users, FolderKanban, Clock, DollarSign, Search, Sparkles, X, Loader2 } from 'lucide-react';
-import { useForecastStore, useHiringForecastStore, usePipelineStore } from '../store';
+import { Link } from 'react-router-dom';
+import {
+  Users, FolderKanban, Clock, DollarSign, Search, Sparkles, X, Loader2,
+  Globe, ArrowUpRight, History, ClipboardList,
+} from 'lucide-react';
+import {
+  useForecastStore, useHiringForecastStore, usePipelineStore,
+  useStaffingStore, useUSStaffingStore,
+} from '../store';
+import { useIndiaRosterStore } from '../store/useIndiaRosterStore';
+import { useUSRosterStore } from '../store/useUSRosterStore';
+import { useOpenBenchStore } from '../store/useOpenBenchStore';
 import { StatCard, Card } from '../components/ui';
 import { PageHeader } from '../components/shared/PageHeader';
 import { deriveEmployeeSummaries, deriveProjectSummaries } from '../lib/parseSpreadsheet';
@@ -188,6 +198,17 @@ export default function DashboardPage() {
   const scenarioSettings = useHiringForecastStore((s) => s.scenarioSettings);
   const pipelineStoreProjects = usePipelineStore((s) => s.projects);
 
+  // Cross-section data sources for the cockpit
+  const indiaReqs = useStaffingStore((s) => s.requisitions);
+  const indiaHistory = useStaffingStore((s) => s.history);
+  const indiaAccounts = useStaffingStore((s) => s.accounts);
+  const indiaRoster = useIndiaRosterStore((s) => s.members);
+  const usReqs = useUSStaffingStore((s) => s.requisitions);
+  const usAccounts = useUSStaffingStore((s) => s.accounts);
+  const usRoster = useUSRosterStore((s) => s.members);
+  const benchResources = useOpenBenchStore((s) => s.resources);
+  const benchUpdates = useOpenBenchStore((s) => s.updates);
+
   const employees = useMemo(() => deriveEmployeeSummaries(assignments), [assignments]);
   const projects = useMemo(() => deriveProjectSummaries(assignments), [assignments]);
 
@@ -266,11 +287,236 @@ export default function DashboardPage() {
       .sort((a, b) => b.value - a.value);
   }, [employees]);
 
+  /* ── Cross-section KPIs ──────────────────────────────────── */
+
+  const ARCHIVED = ['Closed', 'Lost', 'Cancelled'];
+
+  // PROJECTS
+  const activeZohoProjects = pipelineStoreProjects.filter(
+    (p) => p.source === 'zoho' && !['Completed', 'On Hold'].includes(p.status),
+  ).length;
+  const totalRevenueUSD = pipelineStoreProjects.reduce((sum, p) => {
+    if (!p.revenue) return sum;
+    return sum + (p.revenueCurrency === 'CAD' ? p.revenue * 0.73 : p.revenue);
+  }, 0);
+
+  // INDIA T&M
+  const indiaActiveReqs = indiaReqs.filter((r) => !ARCHIVED.includes(r.status_field)).length;
+  const indiaOpenPositions = indiaReqs
+    .filter((r) => !ARCHIVED.includes(r.status_field))
+    .reduce((s, r) => s + (r.new_positions || 0), 0);
+  const indiaRosterTotal = indiaRoster.length;
+  const indiaBilling = indiaRoster.filter((m) => m.status === 'Billable').length;
+  const indiaBench = indiaRoster.filter((m) => m.status === 'Bench').length;
+
+  // US T&M
+  const usActiveReqs = usReqs.filter(
+    (r) => !['Closed/Selected', 'Onboarding', 'Cancelled'].includes(r.stage),
+  ).length;
+  const usRosterTotal = usRoster.length;
+  const usBenchAvailable = benchResources.filter((b) => b.available).length;
+
+  /* ── Recent Activity feed (last 14 days, cross-source) ───── */
+  const recentActivity = useMemo(() => {
+    type Item = { at: string; source: string; href: string; label: string; detail: string };
+    const items: Item[] = [];
+    const cutoff = Date.now() - 14 * 86_400_000;
+
+    // India staffing audit log
+    const acctName = (id: string) => indiaAccounts.find((a) => a.id === id)?.name || 'Unknown';
+    const fieldLabel: Record<string, string> = {
+      title: 'Requisition', month: 'Month', new_positions: 'Positions',
+      expected_closure: 'Expected Closure', start_date: 'Start Date', close_by_date: 'Close Date',
+      status_field: 'Status', stage: 'Stage', anticipation: 'Anticipation',
+      client_spoc: 'Client SPOC', department: 'Department',
+      probability: 'Manual Prob', ai_probability: 'AI Prob',
+    };
+    for (const h of indiaHistory) {
+      if (!h.changed_at || Date.parse(h.changed_at) < cutoff) continue;
+      const req = indiaReqs.find((r) => r.id === h.requisition_id);
+      if (!req) continue;
+      items.push({
+        at: h.changed_at,
+        source: 'India',
+        href: '/india-staffing',
+        label: `${acctName(req.account_id)} — ${req.title}`,
+        detail: `${fieldLabel[h.field] || h.field}: ${h.old_value || '∅'} → ${h.new_value || '∅'}`,
+      });
+    }
+
+    // Open Bench updates (recruiter-logged submissions/interviews/feedback/notes)
+    for (const u of benchUpdates) {
+      if (!u.created_at || Date.parse(u.created_at) < cutoff) continue;
+      const r = benchResources.find((x) => x.id === u.resource_id);
+      items.push({
+        at: u.created_at,
+        source: 'Open Bench',
+        href: '/open-bench',
+        label: r ? `${r.resource_name}` : u.resource_id,
+        detail: `${u.type}${u.client_or_role ? ` · ${u.client_or_role}` : ''} — ${u.update_text}`,
+      });
+    }
+
+    // Sort newest first, take top 12
+    return items.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 12);
+  }, [indiaHistory, indiaReqs, indiaAccounts, benchUpdates, benchResources]);
+
+  /* ── Cockpit section card helper data ────────────────────── */
+  const sections = [
+    {
+      key: 'projects',
+      label: 'Projects',
+      accent: 'violet',
+      icon: FolderKanban,
+      stats: [
+        { label: 'Active', value: activeZohoProjects, sub: 'live in Zoho' },
+        { label: 'Team Size', value: totalEmployees, sub: 'on Project Team' },
+        { label: 'Revenue', value: `$${(totalRevenueUSD / 1000).toFixed(0)}k`, sub: 'pipeline value' },
+      ],
+      links: [
+        { to: '/team',           label: 'Project Team' },
+        { to: '/projects',       label: 'Current Projects' },
+        { to: '/pipeline',       label: 'Pipeline Projects' },
+        { to: '/forecasting',    label: 'Utilization Forecast' },
+        { to: '/hiring-forecast',label: 'Hiring Forecast' },
+        { to: '/financials',     label: 'Financials' },
+      ],
+    },
+    {
+      key: 'india',
+      label: 'India T&M',
+      accent: 'amber',
+      icon: ClipboardList,
+      stats: [
+        { label: 'Active Reqs', value: indiaActiveReqs, sub: `${indiaOpenPositions} positions` },
+        { label: 'Roster',      value: indiaRosterTotal, sub: `${indiaBilling} billable · ${indiaBench} bench` },
+        { label: 'Recent Audit', value: indiaHistory.length, sub: 'all-time changes' },
+      ],
+      links: [
+        { to: '/india-staffing',        label: 'India Demand' },
+        { to: '/india-roster',          label: 'Roster' },
+        { to: '/india-hiring-forecast', label: 'Hiring Forecast' },
+      ],
+    },
+    {
+      key: 'us',
+      label: 'US T&M',
+      accent: 'emerald',
+      icon: Globe,
+      stats: [
+        { label: 'Active Reqs', value: usActiveReqs, sub: `${usReqs.length} total · ${usAccounts.length} accounts` },
+        { label: 'Roster',      value: usRosterTotal, sub: 'US team' },
+        { label: 'Open Bench',  value: usBenchAvailable, sub: 'available now' },
+      ],
+      links: [
+        { to: '/us-staffing', label: 'US Demand' },
+        { to: '/us-roster',   label: 'US Roster' },
+        { to: '/open-bench',  label: 'Open Bench' },
+      ],
+    },
+  ] as const;
+
+  const accentClasses: Record<string, { bar: string; text: string; bg: string }> = {
+    violet:  { bar: 'bg-violet-500',  text: 'text-violet-700',  bg: 'bg-violet-50' },
+    amber:   { bar: 'bg-amber-500',   text: 'text-amber-700',   bg: 'bg-amber-50' },
+    emerald: { bar: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50' },
+  };
+
   return (
     <>
-      <PageHeader title="Command Center" subtitle={`Resource forecasting overview — ${MONTHS[0]} to ${MONTHS[MONTHS.length - 1]} ${new Date().getFullYear()}`} />
+      <PageHeader
+        title="Operations Cockpit"
+        subtitle={`Live cross-section view — ${MONTHS[0]} to ${MONTHS[MONTHS.length - 1]} ${new Date().getFullYear()}`}
+      />
 
       <SmartQueryPanel assignments={assignments} hiringForecast={hiringForecast} />
+
+      {/* ── Section overview: Projects · India T&M · US T&M ──────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+        {sections.map((sec) => {
+          const a = accentClasses[sec.accent];
+          const Icon = sec.icon;
+          return (
+            <div
+              key={sec.key}
+              className={`relative rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden hover:shadow-md transition-shadow`}
+            >
+              {/* Accent bar */}
+              <div className={`absolute left-0 top-0 bottom-0 w-1 ${a.bar}`} />
+              <div className="p-4 pl-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className={`w-7 h-7 rounded-lg ${a.bg} ${a.text} flex items-center justify-center`}>
+                    <Icon size={15} />
+                  </div>
+                  <h3 className={`text-sm font-bold uppercase tracking-wider ${a.text}`}>{sec.label}</h3>
+                </div>
+
+                {/* Stats grid */}
+                <div className="grid grid-cols-3 gap-3 mb-3">
+                  {sec.stats.map((s) => (
+                    <div key={s.label}>
+                      <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{s.label}</div>
+                      <div className="text-xl font-extrabold text-slate-800 tabular-nums">{s.value}</div>
+                      <div className="text-[10px] text-slate-500 mt-0.5">{s.sub}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Quick-link rail */}
+                <div className="flex flex-wrap gap-1 pt-3 border-t border-slate-100">
+                  {sec.links.map((l) => (
+                    <Link
+                      key={l.to}
+                      to={l.to}
+                      className={`text-[10px] font-semibold px-2 py-1 rounded ${a.bg} ${a.text} hover:opacity-80 inline-flex items-center gap-1`}
+                    >
+                      {l.label}
+                      <ArrowUpRight size={10} />
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Recent activity (last 14 days) ─────────────────────────── */}
+      {recentActivity.length > 0 && (
+        <Card className="mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <History size={14} className="text-slate-500" />
+              <h3 className="text-sm font-bold text-slate-800">Recent Activity</h3>
+              <span className="text-[10px] text-slate-400">last 14 days · {recentActivity.length} events</span>
+            </div>
+          </div>
+          <div className="space-y-1.5 max-h-72 overflow-y-auto">
+            {recentActivity.map((item, i) => (
+              <Link
+                key={i}
+                to={item.href}
+                className="flex items-start gap-3 px-2 py-1.5 rounded-lg hover:bg-slate-50 group transition-colors"
+              >
+                <span className="text-[10px] text-slate-400 font-mono w-24 flex-shrink-0 mt-0.5">
+                  {new Date(item.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}{' '}
+                  {new Date(item.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: false })}
+                </span>
+                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide flex-shrink-0 mt-0.5 ${
+                  item.source === 'India'
+                    ? 'bg-amber-100 text-amber-700'
+                    : 'bg-emerald-100 text-emerald-700'
+                }`}>
+                  {item.source}
+                </span>
+                <span className="text-xs font-semibold text-slate-700 w-48 truncate flex-shrink-0">{item.label}</span>
+                <span className="text-xs text-slate-500 flex-1 truncate">{item.detail}</span>
+                <ArrowUpRight size={11} className="text-slate-300 group-hover:text-slate-600 flex-shrink-0 mt-0.5" />
+              </Link>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <div className="grid grid-cols-4 gap-4 mb-6">
         <StatCard icon={<Users size={24} />} label="Team Size" value={totalEmployees} />
