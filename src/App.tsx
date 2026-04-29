@@ -7,6 +7,7 @@ import { buildSeedAssignments } from './data/employeeSeed';
 import { useForecastStore, useFinancialStore, useSyncStore, useHiringForecastStore, usePipelineStore, useStaffingStore, useUSStaffingStore } from './store';
 import { useOpenBenchStore } from './store/useOpenBenchStore';
 import { useIndiaRosterStore } from './store/useIndiaRosterStore';
+import { useUSRosterStore } from './store/useUSRosterStore';
 import { ZOHO_SEED_PROJECTS } from './data/zohoSeed';
 import {
   fetchAssignments,
@@ -19,6 +20,7 @@ import {
   fetchUSStaffing,
   fetchOpenBench,
   fetchIndiaRoster,
+  fetchUSRoster,
   setupRealtimeSubscriptions,
   db,
 } from './lib/supabaseSync';
@@ -62,6 +64,7 @@ function useSupabaseInit() {
           usStaffingRes,
           openBenchRes,
           indiaRosterRes,
+          usRosterRes,
         ] = await Promise.all([
           withTimeout(fetchAssignments()),
           withTimeout(fetchFinancialSettings()),
@@ -73,6 +76,7 @@ function useSupabaseInit() {
           withTimeout(fetchUSStaffing()),
           withTimeout(fetchOpenBench()),
           withTimeout(fetchIndiaRoster()),
+          withTimeout(fetchUSRoster()),
         ]);
 
         // --- Forecast assignments ---
@@ -242,6 +246,23 @@ function useSupabaseInit() {
           console.warn('[supabase] India roster fetch timed out — using localStorage');
         }
 
+        // --- US Roster ---
+        if (!usRosterRes.timedOut) {
+          const ur = usRosterRes.value;
+          if (ur && ur.length > 0) {
+            useUSRosterStore.setState({ members: ur });
+            console.log('[supabase] Loaded us roster:', ur.length, 'members');
+          } else {
+            const local = useUSRosterStore.getState();
+            if (local.members.length > 0) {
+              await db.replaceAllUSRoster(local.members);
+              console.log('[supabase] Seeded us roster to Supabase');
+            }
+          }
+        } else {
+          console.warn('[supabase] US roster fetch timed out — using localStorage');
+        }
+
         // Set up realtime subscriptions
         cleanup = setupRealtimeSubscriptions({
           setForecastState: (assignments, weekDates) => {
@@ -282,6 +303,9 @@ function useSupabaseInit() {
           },
           setIndiaRoster: (members) => {
             useIndiaRosterStore.setState({ members });
+          },
+          setUSRoster: (members) => {
+            useUSRosterStore.setState({ members });
           },
           getForecastAssignments: () => useForecastStore.getState().assignments,
           getStaffingRequests: () => useHiringForecastStore.getState().staffingRequests,
