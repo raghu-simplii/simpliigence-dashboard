@@ -488,10 +488,60 @@ export default function TeamRosterPage() {
     [assignments],
   );
 
+  /* —— Group-by-role: maps each member's role to a canonical bucket so similar
+   *     titles (e.g. "Senior Salesforce Developer", "Sr. SF Dev") collapse
+   *     into the same section. */
+  const roleBucket = (role: string): string => {
+    const r = (role || '').toLowerCase().trim();
+    if (!r) return 'Unspecified';
+    if (/(^|\b)(ba|business analyst|analyst)\b/.test(r)) return 'BAs';
+    if (/(^|\b)(architect|sa|solution\s*architect)\b/.test(r)) return 'Architects';
+    if (/(tech lead|techlead|tl|team lead|lead developer|engineering lead)/.test(r)) return 'Tech Leads';
+    if (/(project manager|^pm$|program manager|delivery manager)/.test(r)) return 'PMs';
+    if (/\b(senior|sr\.?|sr )/.test(r) && /(dev|developer|engineer)/.test(r)) return 'Senior Developers';
+    if (/\b(junior|jr\.?|jr )/.test(r) && /(dev|developer|engineer)/.test(r)) return 'Junior Developers';
+    if (/(dev|developer|engineer)/.test(r)) return 'Developers';
+    if (/(qa|quality|tester|sdet)/.test(r)) return 'QA';
+    if (/(devops|sre|platform)/.test(r)) return 'DevOps';
+    if (/(designer|ux|ui)/.test(r)) return 'Designers';
+    if (/(consultant|advisor)/.test(r)) return 'Consultants';
+    return 'Other';
+  };
+
+  /* Display order for buckets — keeps PMs/Architects/Leads at top so the
+     reader sees senior-most levels first. */
+  const BUCKET_ORDER = [
+    'PMs', 'Architects', 'Tech Leads',
+    'Senior Developers', 'Developers', 'Junior Developers',
+    'BAs', 'Consultants', 'QA', 'DevOps', 'Designers',
+    'Other', 'Unspecified',
+  ];
+
+  const [groupByRole, setGroupByRole] = useState(false);
+
+  /** When grouping, returns sections with a header bucket name; otherwise a single null-keyed group. */
+  const groupedFiltered = useMemo(() => {
+    if (!groupByRole) return [{ bucket: null as string | null, items: filtered }];
+    const map = new Map<string, typeof filtered>();
+    for (const g of filtered) {
+      const b = roleBucket(g.role);
+      if (!map.has(b)) map.set(b, []);
+      map.get(b)!.push(g);
+    }
+    // Sort sections by display order, then alphabetically within
+    return [...map.entries()]
+      .sort(([a], [b]) => {
+        const ai = BUCKET_ORDER.indexOf(a);
+        const bi = BUCKET_ORDER.indexOf(b);
+        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+      })
+      .map(([bucket, items]) => ({ bucket: bucket as string | null, items }));
+  }, [groupByRole, filtered]);
+
   return (
     <>
       <PageHeader
-        title="Team Roster"
+        title="Project Team"
         subtitle={`${groups.length} team members · ${allProjects.length} projects · ${assignments.length} allocations`}
       />
 
@@ -507,6 +557,18 @@ export default function TeamRosterPage() {
             <option value="">All Projects</option>
             {allProjects.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
+          {/* Group-by-role toggle */}
+          <button
+            onClick={() => setGroupByRole((v) => !v)}
+            className={`px-3 py-2 text-sm rounded-lg border transition-colors ${
+              groupByRole
+                ? 'bg-primary/10 border-primary/40 text-primary font-semibold'
+                : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
+            }`}
+            title="Group rows into sections by role (BAs, Developers, Architects, etc.)"
+          >
+            {groupByRole ? '✓ Grouped by role' : 'Group by role'}
+          </button>
           <button onClick={() => setShowAddForm((v) => !v)} className="px-4 py-2 text-sm font-medium rounded-lg bg-primary text-white hover:bg-primary/90">+ Add Resource</button>
         </div>
 
@@ -584,7 +646,7 @@ export default function TeamRosterPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((g) => {
+              {(groupByRole ? groupedFiltered.flatMap((s) => s.items) : filtered).map((g, idx, arr) => {
                 const isExpanded = expandedEmp.has(g.name);
 
                 // Compute weekly totals across all projects
@@ -596,8 +658,29 @@ export default function TeamRosterPage() {
                 }
                 const monthTotal = g.assignments.reduce((s, a) => s + (a.monthlyTotals[selectedMonth] ?? 0), 0);
 
+                // Section header — emit when grouping by role and the bucket
+                // changes from the previous row. We render it as the first
+                // child of the Fragment so each row remains atomic.
+                const currentBucket = roleBucket(g.role);
+                const prevBucket = idx > 0 ? roleBucket(arr[idx - 1].role) : null;
+                const showSectionHeader = groupByRole && currentBucket !== prevBucket;
+                const sectionMemberCount = groupByRole
+                  ? arr.filter((x) => roleBucket(x.role) === currentBucket).length
+                  : 0;
+                const totalCols = 6 + weekDates.length + 4;
+
                 return (
                   <Fragment key={g.name}>
+                    {showSectionHeader && (
+                      <tr className="bg-gradient-to-r from-slate-100 to-slate-50">
+                        <td colSpan={totalCols} className="py-1.5 px-3 text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                          {currentBucket}
+                          <span className="ml-2 text-slate-400 font-normal text-[10px]">
+                            {sectionMemberCount} {sectionMemberCount === 1 ? 'member' : 'members'}
+                          </span>
+                        </td>
+                      </tr>
+                    )}
                     {/* Employee summary row */}
                     <tr className="border-b border-slate-100 hover:bg-slate-50 group">
                       <td className="py-2 pr-2">
