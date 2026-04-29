@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { RouterProvider } from 'react-router-dom';
 import { router } from './router';
 import { nanoid } from 'nanoid';
+import { AuthGate } from './components/AuthGate';
 import { buildSeedAssignments } from './data/employeeSeed';
 import { useForecastStore, useFinancialStore, useSyncStore, useHiringForecastStore, usePipelineStore, useStaffingStore, useUSStaffingStore } from './store';
 import { useOpenBenchStore } from './store/useOpenBenchStore';
@@ -281,7 +282,9 @@ function useSupabaseInit() {
   return ready;
 }
 
-function App() {
+/** Inner app — only mounts AFTER the user is authenticated, so all Supabase
+ *  reads run as the signed-in user (RLS sees a real auth.uid()). */
+function AuthenticatedApp() {
   const ready = useSupabaseInit();
 
   if (!ready) {
@@ -296,6 +299,14 @@ function App() {
   }
 
   return <RouterProvider router={router} />;
+}
+
+function App() {
+  return (
+    <AuthGate>
+      <AuthenticatedApp />
+    </AuthGate>
+  );
 }
 
 export default App;

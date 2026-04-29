@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -15,7 +16,10 @@ import {
   PanelLeftOpen,
   Globe,
   UserCheck,
+  LogOut,
 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { signOut } from '../lib/auth';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -37,6 +41,19 @@ interface SidebarProps {
 }
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+  const [email, setEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    supabase.auth.getUser().then(({ data }) => {
+      if (mounted) setEmail(data.user?.email ?? null);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      if (mounted) setEmail(session?.user?.email ?? null);
+    });
+    return () => { mounted = false; sub.subscription.unsubscribe(); };
+  }, []);
+
   return (
     <aside
       className={`${collapsed ? 'w-[68px]' : 'w-60'} bg-sidebar h-screen flex flex-col fixed left-0 top-0 z-40 transition-all duration-300 ease-in-out`}
@@ -74,6 +91,40 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           </NavLink>
         ))}
       </nav>
+
+      {/* User identity + sign-out */}
+      {email && (
+        <div className={`${collapsed ? 'px-2' : 'px-3'} pt-3 mt-3 border-t border-slate-700/40`}>
+          {collapsed ? (
+            <button
+              type="button"
+              onClick={() => signOut()}
+              title={`Signed in as ${email} — click to sign out`}
+              className="flex items-center justify-center w-full py-2 rounded-lg text-slate-400 hover:text-white hover:bg-sidebar-hover transition-colors"
+            >
+              <span className="w-7 h-7 rounded-full bg-primary/20 text-primary text-xs font-bold flex items-center justify-center uppercase">
+                {email.charAt(0)}
+              </span>
+            </button>
+          ) : (
+            <div className="flex items-center gap-2 px-2 py-1.5">
+              <span className="w-7 h-7 rounded-full bg-primary/20 text-primary text-xs font-bold flex items-center justify-center uppercase flex-shrink-0">
+                {email.charAt(0)}
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="text-[11px] text-slate-300 truncate" title={email}>{email}</div>
+                <button
+                  type="button"
+                  onClick={() => signOut()}
+                  className="text-[10px] text-slate-500 hover:text-white inline-flex items-center gap-1 mt-0.5 transition-colors"
+                >
+                  <LogOut size={10} /> Sign out
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Bottom: Settings + Toggle */}
       <div className={`${collapsed ? 'px-2' : 'px-3'} pb-3 space-y-1`}>
