@@ -9,9 +9,10 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
   Users, UserCheck, Briefcase, TrendingUp, DollarSign, Plus, Search,
-  Trash2, Pencil, Download, Shield,
+  Trash2, Pencil, Download, Shield, X, Check,
 } from 'lucide-react';
 import { useUSRosterStore } from '../store/useUSRosterStore';
+import { usePipelineStore } from '../store/usePipelineStore';
 import { PageHeader } from '../components/shared/PageHeader';
 import { Card, StatCard } from '../components/ui';
 import {
@@ -21,6 +22,156 @@ import {
 } from '../types/usRoster';
 import { ROSTER_ROLES } from '../types/indiaRoster';
 import type { VisaCategory } from '../types/openBench';
+
+/* —— Multi-project helpers ——
+ * `project` is stored as a single TEXT column (comma-separated). One US
+ * resource can be allocated across multiple projects simultaneously
+ * (typical for shared-services / part-time arrangements). We split on
+ * commas for display, join with ", " on save. */
+const parseProjects = (s: string | null | undefined): string[] =>
+  String(s || '').split(/\s*,\s*/).map(x => x.trim()).filter(Boolean);
+const joinProjects = (arr: string[]): string =>
+  Array.from(new Set(arr.map(x => x.trim()).filter(Boolean))).join(', ');
+
+/* —— Multi-select project picker ——
+ * Click the chip area to open a popover. Shows known projects (current
+ * roster + pipeline) as a checklist; supports free-text "Add new" for
+ * projects not yet in the system. */
+function MultiProjectPicker({
+  value, options, onSave,
+}: {
+  value: string;
+  options: string[];
+  onSave: (next: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState('');
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const selected = useMemo(() => parseProjects(value), [value]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  const allOptions = useMemo(() => {
+    const set = new Set<string>([...options, ...selected]);
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [options, selected]);
+
+  const filteredOpts = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    if (!q) return allOptions;
+    return allOptions.filter(o => o.toLowerCase().includes(q));
+  }, [allOptions, filter]);
+
+  const toggle = (proj: string) => {
+    const next = selected.includes(proj)
+      ? selected.filter(p => p !== proj)
+      : [...selected, proj];
+    onSave(joinProjects(next));
+  };
+
+  const addNew = () => {
+    const v = filter.trim();
+    if (!v || selected.includes(v)) return;
+    onSave(joinProjects([...selected, v]));
+    setFilter('');
+  };
+
+  const removeChip = (proj: string) => {
+    onSave(joinProjects(selected.filter(p => p !== proj)));
+  };
+
+  return (
+    <div className="relative" ref={wrapRef}>
+      <div
+        className="group cursor-pointer rounded px-1 -mx-1 hover:bg-blue-50 hover:ring-1 hover:ring-blue-200 transition-all min-h-[24px] flex items-center flex-wrap gap-1"
+        onClick={() => setOpen(o => !o)}
+        title="Click to manage project allocations"
+      >
+        {selected.length === 0 && (
+          <span className="text-slate-400 italic text-[11px]">— Unallocated —</span>
+        )}
+        {selected.map(p => (
+          <span
+            key={p}
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-800"
+          >
+            {p}
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); removeChip(p); }}
+              className="hover:bg-blue-200 rounded-full p-0.5"
+              title={`Remove ${p}`}
+            >
+              <X size={9} />
+            </button>
+          </span>
+        ))}
+        <Pencil size={10} className="ml-auto opacity-0 group-hover:opacity-40 flex-shrink-0" />
+      </div>
+
+      {open && (
+        <div className="absolute z-30 mt-1 left-0 w-72 max-h-80 overflow-hidden bg-white border border-slate-200 rounded-lg shadow-xl flex flex-col">
+          <div className="p-2 border-b border-slate-100">
+            <input
+              autoFocus
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="Search or add a project..."
+              className="w-full text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (filteredOpts.length === 1) toggle(filteredOpts[0]);
+                  else if (filter.trim() && !allOptions.includes(filter.trim())) addNew();
+                }
+                if (e.key === 'Escape') setOpen(false);
+              }}
+            />
+          </div>
+          <div className="overflow-y-auto flex-1">
+            {filteredOpts.map(opt => {
+              const checked = selected.includes(opt);
+              return (
+                <button
+                  type="button"
+                  key={opt}
+                  onClick={() => toggle(opt)}
+                  className={`w-full px-2 py-1.5 text-left text-xs flex items-center gap-2 hover:bg-blue-50 ${checked ? 'bg-blue-50/60' : ''}`}
+                >
+                  <span className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${checked ? 'bg-blue-500 border-blue-500' : 'border-slate-300'}`}>
+                    {checked && <Check size={10} className="text-white" />}
+                  </span>
+                  <span className="text-slate-700 truncate">{opt}</span>
+                </button>
+              );
+            })}
+            {filter.trim() && !allOptions.some(o => o.toLowerCase() === filter.trim().toLowerCase()) && (
+              <button
+                type="button"
+                onClick={addNew}
+                className="w-full px-2 py-1.5 text-left text-xs flex items-center gap-2 text-blue-600 hover:bg-blue-50 border-t border-slate-100"
+              >
+                <Plus size={11} /> Add &ldquo;{filter.trim()}&rdquo; as new project
+              </button>
+            )}
+            {filteredOpts.length === 0 && !filter.trim() && (
+              <div className="px-3 py-3 text-[11px] text-slate-400 italic text-center">
+                No projects yet — type to add the first one.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const VISA_CATEGORIES: VisaCategory[] = ['H1B','L1','L2 EAD','H4 EAD','GC','GC EAD','US Citizen','OPT','CPT','TN','Other'];
 const VISA_COLORS: Record<string, string> = {
@@ -92,6 +243,7 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
 
 export default function USRosterPage() {
   const { members, addMember, updateMember, removeMember } = useUSRosterStore();
+  const pipelineProjects = usePipelineStore((s) => s.projects);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [roleFilter, setRoleFilter] = useState<string>('All');
@@ -154,6 +306,19 @@ export default function USRosterPage() {
   const monthlyRevenue = useMemo(() =>
     members.filter(m => m.status === 'Billable').reduce((s, m) => s + m.bill_rate * 160, 0),
     [members]);
+
+  /* —— Project picklist options ——
+   * Combine: (a) projects already on roster members (legacy + manual entries),
+   * (b) live Zoho-synced pipeline projects. Dedup, sort. */
+  const projectOptions = useMemo(() => {
+    const set = new Set<string>();
+    members.forEach(m => parseProjects(m.project).forEach(p => set.add(p)));
+    pipelineProjects.forEach(p => {
+      if (p.name) set.add(p.name);
+      if ((p as any).forecastName) set.add((p as any).forecastName);
+    });
+    return Array.from(set).filter(Boolean).sort((a, b) => a.localeCompare(b));
+  }, [members, pipelineProjects]);
 
   /* —— Visa distribution —— */
   const visaDist = useMemo(() => {
@@ -305,9 +470,14 @@ export default function USRosterPage() {
                 </select>
               </div>
               <div>
-                <label className="text-[10px] uppercase text-slate-500 font-semibold">Project</label>
-                <input value={draft.project} onChange={(e) => setDraft({ ...draft, project: e.target.value })}
-                  className="w-full text-xs border rounded px-2 py-1.5 mt-0.5" />
+                <label className="text-[10px] uppercase text-slate-500 font-semibold">Project(s)</label>
+                <div className="mt-0.5 border rounded px-2 py-1 bg-white">
+                  <MultiProjectPicker
+                    value={draft.project}
+                    options={projectOptions}
+                    onSave={(next) => setDraft({ ...draft, project: next })}
+                  />
+                </div>
               </div>
               <div>
                 <label className="text-[10px] uppercase text-slate-500 font-semibold">Status</label>
@@ -401,8 +571,12 @@ export default function USRosterPage() {
                     <td className="px-3 py-2">
                       <EditableCell value={m.role} type="select" options={[...ROSTER_ROLES]} onSave={(v) => handleCellSave(m.id, 'role', v)} />
                     </td>
-                    <td className="px-3 py-2">
-                      <EditableCell value={m.project} onSave={(v) => handleCellSave(m.id, 'project', v)} />
+                    <td className="px-3 py-2 min-w-[180px]">
+                      <MultiProjectPicker
+                        value={m.project}
+                        options={projectOptions}
+                        onSave={(next) => handleCellSave(m.id, 'project', next)}
+                      />
                     </td>
                     <td className="px-3 py-2">
                       <EditableCell value={m.status} type="select" options={US_ROSTER_STATUSES}
