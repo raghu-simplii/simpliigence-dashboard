@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useCallback, useEffect, Fragment } from 'react';
 import {
   Users, AlertTriangle, TrendingUp, CheckCircle, Upload,
   Download, Brain, BarChart3, Building2, Pencil, Trash2, Save, X, ChevronDown, ChevronRight, Plus, Archive, History,
@@ -120,6 +120,7 @@ export default function IndiaStaffingPage() {
   // (non-archived) rows; clicking the header checkbox toggles "all visible".
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [groupByAccount, setGroupByAccount] = useState(true);
 
   // AI Daily Briefing (cached per day in localStorage — see runStaffingBriefing)
   const [briefing, setBriefing] = useState<StaffingBriefing | null>(null);
@@ -363,7 +364,7 @@ export default function IndiaStaffingPage() {
   }, [filtered]);
 
   /** Table row renderer — shared between active and archive tables */
-  const renderRow = (r: StaffingRow, opts: { archived?: boolean; selectable?: boolean } = {}) => {
+  const renderRow = (r: StaffingRow, opts: { archived?: boolean; selectable?: boolean; hideAccount?: boolean } = {}) => {
     const isExpanded = expandedRows.has(r.id);
     const reqStatuses = statuses.filter(s => s.requisition_id === r.id).sort((a, b) => b.status_date.localeCompare(a.status_date));
     const rowHistory = historyFor(r.id);
@@ -404,11 +405,15 @@ export default function IndiaStaffingPage() {
               {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
             </button>
           </td>
-          {/* Account */}
+          {/* Account — dimmed when the section header already shows it */}
           <td className="p-2">
             <EditableCell value={r.account_id} type="select" options={accounts.map(a => a.id)}
               onSave={(val) => handleCellSave(r.id, 'account_id', val)}
-              displayContent={<span className="font-bold">{r.account}</span>} />
+              displayContent={
+                <span className={opts.hideAccount ? 'text-slate-300 text-[10px]' : 'font-bold'}>
+                  {opts.hideAccount ? '↳' : r.account}
+                </span>
+              } />
           </td>
           {/* Requisition */}
           <td className="p-2">
@@ -942,7 +947,20 @@ export default function IndiaStaffingPage() {
 
           <Card>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="font-bold text-sm">Active Requisitions</h3>
+              <div className="flex items-center gap-3">
+                <h3 className="font-bold text-sm">Active Requisitions</h3>
+                <button
+                  onClick={() => setGroupByAccount((v) => !v)}
+                  className={`px-2.5 py-1 text-[11px] rounded-lg border transition-colors ${
+                    groupByAccount
+                      ? 'bg-primary/10 border-primary/40 text-primary font-semibold'
+                      : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
+                  }`}
+                  title="Group rows under bold account-name banners"
+                >
+                  {groupByAccount ? '✓ Grouped by account' : 'Group by account'}
+                </button>
+              </div>
               <span className="text-[10px] text-blue-500 font-medium bg-blue-50 px-2 py-1 rounded-full">Click any cell to edit | AI Prob auto-updates from status history</span>
             </div>
 
@@ -1035,7 +1053,65 @@ export default function IndiaStaffingPage() {
               <table className="w-full text-xs">
                 <TableHeader selectable />
                 <tbody>
-                  {filtered.map((r) => renderRow(r, { selectable: true }))}
+                  {(() => {
+                    // When grouping is on, sort filtered rows by account name
+                    // first so all rows for the same account land contiguously.
+                    // Within an account, order high-AI-prob → low-AI-prob so the
+                    // strongest reqs surface first.
+                    const ordered = groupByAccount
+                      ? [...filtered].sort((a, b) =>
+                          a.account.localeCompare(b.account) ||
+                          b.aiProbability - a.aiProbability,
+                        )
+                      : filtered;
+                    let prevAccount: string | null = null;
+                    // Total columns must include the bulk-select checkbox + the
+                    // expand-chevron + every data column + the trash button so
+                    // the section banner spans the whole row width.
+                    const totalCols = 18; // selectable=true → 18, see TableHeader
+                    return ordered.map((r) => {
+                      const showHeader = groupByAccount && r.account !== prevAccount;
+                      if (showHeader) prevAccount = r.account;
+                      // Pre-compute the section's aggregate stats once per change.
+                      let sectionReqs = 0;
+                      let sectionPositions = 0;
+                      let sectionAvgAi = 0;
+                      if (showHeader) {
+                        const same = ordered.filter((x) => x.account === r.account);
+                        sectionReqs = same.length;
+                        sectionPositions = same.reduce((s, x) => s + x.newPositions, 0);
+                        sectionAvgAi = same.length
+                          ? Math.round(same.reduce((s, x) => s + x.aiProbability, 0) / same.length)
+                          : 0;
+                      }
+                      return (
+                        <Fragment key={`row-${r.id}`}>
+                          {showHeader && (
+                            <tr className="border-y-2 border-blue-200 bg-gradient-to-r from-blue-50 via-indigo-50 to-violet-50">
+                              <td colSpan={totalCols} className="py-2.5 px-3">
+                                <div className="flex items-baseline gap-3">
+                                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-primary/15 text-primary flex-shrink-0">
+                                    <Building2 size={14} />
+                                  </span>
+                                  <span className="text-base font-extrabold text-slate-900 tracking-tight">
+                                    {r.account}
+                                  </span>
+                                  <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide">
+                                    {sectionReqs} {sectionReqs === 1 ? 'req' : 'reqs'}
+                                    <span className="text-slate-300 mx-1">·</span>
+                                    <span className="text-slate-700">{sectionPositions}</span> open positions
+                                    <span className="text-slate-300 mx-1">·</span>
+                                    avg AI prob <span className="text-slate-700">{sectionAvgAi}%</span>
+                                  </span>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                          {renderRow(r, { selectable: true, hideAccount: groupByAccount })}
+                        </Fragment>
+                      );
+                    });
+                  })()}
                 </tbody>
               </table>
             </div>
