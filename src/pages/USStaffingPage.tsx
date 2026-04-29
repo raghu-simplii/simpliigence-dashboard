@@ -208,66 +208,132 @@ export default function USStaffingPage() {
   const fAtRisk = scoredReqs.filter(r => r.risk === 'high').length;
   const fAvgProb = scoredReqs.length ? Math.round(scoredReqs.reduce((s, r) => s + r.closureProb, 0) / scoredReqs.length) : 0;
 
-  /* —— Render grouped by account —— */
+  /* —— Render grouped by account — India-Demand-style bold banners ——
+   *
+   * One flat table per category (MSP / SI), with each account introduced by
+   * a bold gradient banner row showing: building icon, account name, MSP/SI
+   * badge, req count, active count, and average AI probability. Within each
+   * account the rows are sorted by AI probability descending so the strongest
+   * roles surface first. Every existing field is preserved (Role / Initiation
+   * / Stage / Closure / Notes) and remains inline-editable. */
   const renderAccountGroup = (acctList: typeof accounts, categoryLabel: string) => {
-    const groupReqs = filteredReqs.filter(r => acctList.some(a => a.id === r.account_id));
-    // Only show accounts that actually have requisitions matching the current filter.
-    // Empty accounts are managed from the Overview tab (see MSP/SI summary cards),
-    // which keeps this browsing view focused on real work.
     const populatedAccounts = acctList.filter(a => filteredReqs.some(r => r.account_id === a.id));
     if (populatedAccounts.length === 0) return null;
+    const totalReqs = filteredReqs.filter(r => acctList.some(a => a.id === r.account_id)).length;
+
+    // Build a flat ordered list with stable account-grouping. We sort by
+    // account name then by AI prob desc within the group so we can emit a
+    // banner whenever the account_id changes from the previous row.
+    const ordered = [...filteredReqs]
+      .filter(r => acctList.some(a => a.id === r.account_id))
+      .map(r => {
+        const acct = acctList.find(a => a.id === r.account_id);
+        const score = scoreReq({ ...r, account_name: acct?.name || '', account_category: acct?.category || categoryLabel } as any);
+        return { ...r, _account_name: acct?.name || 'Unknown', _account_category: acct?.category, _score: score };
+      })
+      .sort((a, b) =>
+        a._account_name.localeCompare(b._account_name) ||
+        b._score - a._score,
+      );
 
     return (
-      <div className="mb-6">
+      <div className="mb-8">
+        {/* Category section header */}
         <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
           <Building2 size={16} /> {categoryLabel}
-          <span className="text-xs font-normal text-slate-400">({groupReqs.length} requisitions)</span>
+          <span className="text-xs font-normal text-slate-400">
+            ({totalReqs} requisitions across {populatedAccounts.length} accounts)
+          </span>
         </h3>
-        {populatedAccounts.map(acct => {
-          const acctReqs = filteredReqs.filter(r => r.account_id === acct.id);
-          const isExpanded = expandedAccounts.has(acct.id);
 
-          return (
-            <Card key={acct.id} className="mb-3 group">
-              <div className="flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-slate-50 rounded-t-xl" onClick={() => toggleAccount(acct.id)}>
-                <div className="flex items-center gap-2">
-                  {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                  <span className="font-semibold text-sm text-slate-800">{acct.name}</span>
-                  <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{acct.category}</span>
-                  <span className="text-xs text-slate-400">{acctReqs.length} roles</span>
-                </div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (confirm(`Delete account "${acct.name}" and all its ${acctReqs.length} requisitions?`)) {
-                      acctReqs.forEach(r => removeRequisition(r.id));
-                      removeAccount(acct.id);
+        <Card>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-slate-50 text-slate-500 uppercase tracking-wider">
+                  <th className="px-3 py-2 text-left font-semibold text-[10px] min-w-[180px]">Account / Role</th>
+                  <th className="px-3 py-2 text-left font-semibold text-[10px]">Initiation Date</th>
+                  <th className="px-3 py-2 text-left font-semibold text-[10px]">Stage</th>
+                  <th className="px-3 py-2 text-left font-semibold text-[10px]">Closure Date</th>
+                  <th className="px-3 py-2 text-left font-semibold text-[10px]">AI Prob</th>
+                  <th className="px-3 py-2 text-left font-semibold text-[10px] min-w-[200px]">Notes</th>
+                  <th className="px-3 py-2 text-center font-semibold text-[10px] w-12"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  let prevAccountId: string | null = null;
+                  return ordered.map((req) => {
+                    const showBanner = req.account_id !== prevAccountId;
+                    if (showBanner) prevAccountId = req.account_id;
+
+                    // Aggregate stats for this account (computed once per banner)
+                    let acctReqCount = 0;
+                    let activeCount = 0;
+                    let avgAi = 0;
+                    if (showBanner) {
+                      const same = ordered.filter(x => x.account_id === req.account_id);
+                      acctReqCount = same.length;
+                      activeCount = same.filter(x => !['Closed/Selected', 'Onboarding', 'Cancelled'].includes(x.stage as string)).length;
+                      avgAi = same.length
+                        ? Math.round(same.reduce((s, x) => s + x._score, 0) / same.length)
+                        : 0;
                     }
-                  }}
-                  className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                  title="Delete account"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-              {isExpanded && (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="bg-slate-50 text-slate-500 uppercase tracking-wider">
-                        <th className="px-3 py-2 text-left font-semibold">Role</th>
-                        <th className="px-3 py-2 text-left font-semibold">Initiation Date</th>
-                        <th className="px-3 py-2 text-left font-semibold">Stage</th>
-                        <th className="px-3 py-2 text-left font-semibold">Closure Date</th>
-                        <th className="px-3 py-2 text-left font-semibold">Notes</th>
-                        <th className="px-3 py-2 text-center font-semibold w-16">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {acctReqs.map(req => (
-                        <tr key={req.id} className="border-t border-slate-100 hover:bg-blue-50/30">
-                          <td className="px-3 py-2">
-                            <EditableCell value={req.role} onSave={(v) => handleCellSave(req.id, 'role', v)} />
+
+                    const probColor = req._score >= 65 ? '#10b981' : req._score >= 40 ? '#f59e0b' : '#ef4444';
+
+                    return (
+                      <React.Fragment key={req.id}>
+                        {showBanner && (
+                          <tr className="border-y-2 border-blue-200 bg-gradient-to-r from-blue-50 via-indigo-50 to-violet-50 group/banner">
+                            <td colSpan={7} className="py-2.5 px-3">
+                              <div className="flex items-baseline gap-3">
+                                <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-primary/15 text-primary flex-shrink-0">
+                                  <Building2 size={14} />
+                                </span>
+                                <span className="text-base font-extrabold text-slate-900 tracking-tight">
+                                  {req._account_name}
+                                </span>
+                                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                                  req._account_category === 'MSP'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'bg-violet-100 text-violet-700'
+                                }`}>
+                                  {req._account_category}
+                                </span>
+                                <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide">
+                                  {acctReqCount} {acctReqCount === 1 ? 'role' : 'roles'}
+                                  <span className="text-slate-300 mx-1">·</span>
+                                  <span className="text-emerald-700">{activeCount}</span> active
+                                  <span className="text-slate-300 mx-1">·</span>
+                                  avg AI prob <span className="text-slate-700">{avgAi}%</span>
+                                </span>
+                                {/* Delete-account hover affordance */}
+                                <span className="flex-1" />
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (confirm(`Delete account "${req._account_name}" and all its ${acctReqCount} requisitions?`)) {
+                                      filteredReqs.filter(r => r.account_id === req.account_id).forEach(r => removeRequisition(r.id));
+                                      removeAccount(req.account_id);
+                                    }
+                                  }}
+                                  className="opacity-0 group-hover/banner:opacity-100 transition-opacity p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded text-[10px]"
+                                  title="Delete account"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        <tr className="border-t border-slate-100 hover:bg-blue-50/30">
+                          {/* Role — indented under the account banner with a ↳ guide */}
+                          <td className="px-3 py-2 pl-10">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-slate-300 text-[10px]">↳</span>
+                              <EditableCell value={req.role} onSave={(v) => handleCellSave(req.id, 'role', v)} />
+                            </div>
                           </td>
                           <td className="px-3 py-2">
                             <EditableCell value={req.initiation_date} onSave={(v) => handleCellSave(req.id, 'initiation_date', v)} />
@@ -277,8 +343,7 @@ export default function USStaffingPage() {
                               value={req.stage} type="select" options={ALL_STAGES}
                               onSave={(v) => handleCellSave(req.id, 'stage', v)}
                               displayContent={
-                                <span className="inline-flex items-center gap-1">
-                                  <span className="w-2 h-2 rounded-full" style={{ background: US_STAGE_COLORS[req.stage as USStaffingStage] || '#94a3b8' }} />
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white" style={{ background: US_STAGE_COLORS[req.stage as USStaffingStage] || '#94a3b8' }}>
                                   {req.stage}
                                 </span>
                               }
@@ -287,23 +352,31 @@ export default function USStaffingPage() {
                           <td className="px-3 py-2">
                             <EditableCell value={req.closure_date} onSave={(v) => handleCellSave(req.id, 'closure_date', v)} />
                           </td>
-                          <td className="px-3 py-2 max-w-[200px]">
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-1.5">
+                              <div className="w-10 h-1.5 rounded bg-slate-100 overflow-hidden">
+                                <div className="h-full rounded" style={{ width: `${req._score}%`, background: probColor }} />
+                              </div>
+                              <span className="font-bold text-[11px] tabular-nums" style={{ color: probColor }}>{req._score}%</span>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 max-w-[260px]">
                             <EditableCell value={req.notes} type="textarea" onSave={(v) => handleCellSave(req.id, 'notes', v)} />
                           </td>
                           <td className="px-3 py-2 text-center">
-                            <button onClick={() => removeRequisition(req.id)} className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded" title="Delete">
-                              <Trash2 size={14} />
+                            <button onClick={() => { if (confirm(`Delete "${req.role}"?`)) removeRequisition(req.id); }} className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded" title="Delete requisition">
+                              <Trash2 size={13} />
                             </button>
                           </td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </Card>
-          );
-        })}
+                      </React.Fragment>
+                    );
+                  });
+                })()}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       </div>
     );
   };
