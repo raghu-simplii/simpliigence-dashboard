@@ -9,10 +9,10 @@
  * Stats at top: total team size, billable / bench split, average margin,
  * total monthly revenue at 160 hrs/month per billable member.
  */
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback, Fragment } from 'react';
 import {
   Users, UserCheck, Briefcase, TrendingUp, DollarSign, Plus, Search,
-  Trash2, Pencil, Filter, Download, ChevronDown, ChevronRight,
+  Trash2, Pencil, Filter, Download, ChevronDown, ChevronRight, Building2,
 } from 'lucide-react';
 import { useIndiaRosterStore } from '../store/useIndiaRosterStore';
 import { PageHeader } from '../components/shared/PageHeader';
@@ -94,6 +94,7 @@ export default function IndiaRosterPage() {
   const [sortField, setSortField] = useState<string>('name');
   const [sortAsc, setSortAsc] = useState(true);
   const [showInactive, setShowInactive] = useState(false);
+  const [groupByAccount, setGroupByAccount] = useState(true);
 
   // New-member draft
   const [draft, setDraft] = useState({
@@ -135,15 +136,29 @@ export default function IndiaRosterPage() {
 
   /* —— Active vs Inactive split ——
    * Active  = Billable (currently earning revenue this month)
-   * Inactive = Bench / On Leave / Notice (no current allocation or leaving) */
-  const activeRows = useMemo(
-    () => filtered.filter(m => m.status === 'Billable'),
-    [filtered],
-  );
-  const inactiveRows = useMemo(
-    () => filtered.filter(m => m.status !== 'Billable'),
-    [filtered],
-  );
+   * Inactive = Bench / On Leave / Notice (no current allocation or leaving)
+   *
+   * When groupByAccount is on, we override the user's sort field with a
+   * (project, sortField) ordering so account banners group correctly.
+   */
+  const sortByProjectThen = useCallback((a: any, b: any) => {
+    const pcmp = String(a.project || '').localeCompare(String(b.project || ''));
+    if (pcmp !== 0) return pcmp;
+    const av = (a as any)[sortField];
+    const bv = (b as any)[sortField];
+    if (typeof av === 'number' && typeof bv === 'number') return sortAsc ? av - bv : bv - av;
+    return sortAsc ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
+  }, [sortField, sortAsc]);
+
+  const activeRows = useMemo(() => {
+    const rows = filtered.filter(m => m.status === 'Billable');
+    return groupByAccount ? [...rows].sort(sortByProjectThen) : rows;
+  }, [filtered, groupByAccount, sortByProjectThen]);
+
+  const inactiveRows = useMemo(() => {
+    const rows = filtered.filter(m => m.status !== 'Billable');
+    return groupByAccount ? [...rows].sort(sortByProjectThen) : rows;
+  }, [filtered, groupByAccount, sortByProjectThen]);
 
   /* —— Stats —— */
   const total = members.length;
@@ -279,6 +294,17 @@ export default function IndiaRosterPage() {
           <option value="All">All Roles</option>
           {ROSTER_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
         </select>
+        <button
+          onClick={() => setGroupByAccount(v => !v)}
+          className={`text-xs border rounded-lg px-3 py-1.5 transition-colors ${
+            groupByAccount
+              ? 'border-blue-300 bg-blue-50 text-blue-700 font-semibold'
+              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+          }`}
+          title="Group rows under bold account-name banners"
+        >
+          {groupByAccount ? '✓ Grouped by account' : 'Group by account'}
+        </button>
         <div className="flex-1" />
         <button onClick={exportCSV} className="flex items-center gap-1 text-xs border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-50">
           <Download size={13} /> Export CSV
@@ -395,7 +421,7 @@ export default function IndiaRosterPage() {
               </tr>
             </thead>
             <tbody>
-              {activeRows.map((m) => renderMemberRow(m, handleCellSave, removeMember))}
+              {renderRowsGrouped(activeRows, groupByAccount, handleCellSave, removeMember, 10)}
               {activeRows.length === 0 && (
                 <tr>
                   <td colSpan={10} className="px-3 py-8 text-center text-slate-400">
@@ -447,7 +473,7 @@ export default function IndiaRosterPage() {
                 </tr>
               </thead>
               <tbody>
-                {inactiveRows.map((m) => renderMemberRow(m, handleCellSave, removeMember))}
+                {renderRowsGrouped(inactiveRows, groupByAccount, handleCellSave, removeMember, 10)}
                 {inactiveRows.length === 0 && (
                   <tr>
                     <td colSpan={10} className="px-3 py-8 text-center text-slate-400">
@@ -499,6 +525,80 @@ function SharePointSyncBanner({ members }: { members: any[] }) {
       </div>
     </div>
   );
+}
+
+/* —— Grouped row renderer ——
+ * When `grouped` is true, inserts a bold gradient banner row before each new
+ * account/project. Banner shows: account name, headcount in this section,
+ * total monthly revenue at 160 hrs/mo, and avg margin. Mirrors the India
+ * Demand banner pattern.
+ *
+ * Assumes rows are already sorted by (project, then secondary key).
+ */
+function renderRowsGrouped(
+  rows: any[],
+  grouped: boolean,
+  handleCellSave: (id: string, field: string, val: string | number) => void,
+  removeMember: (id: string) => void,
+  totalCols: number,
+) {
+  if (!grouped) {
+    return rows.map((m) => renderMemberRow(m, handleCellSave, removeMember));
+  }
+
+  let prevProject: string | null = null;
+  return rows.map((m, idx) => {
+    const showHeader = m.project !== prevProject;
+    prevProject = m.project;
+
+    let sectionCount = 0;
+    let sectionRevenue = 0;
+    let sectionAvgMargin = 0;
+    if (showHeader) {
+      const same = rows.filter((x) => x.project === m.project);
+      sectionCount = same.length;
+      sectionRevenue = same.reduce((s, x) => s + (Number(x.bill_rate) || 0) * 160, 0);
+      const withRate = same.filter((x) => x.bill_rate > 0);
+      sectionAvgMargin = withRate.length
+        ? Math.round(withRate.reduce((s, x) => s + calcMarginPercent(x), 0) / withRate.length)
+        : 0;
+    }
+
+    return (
+      <Fragment key={`row-${m.id}-${idx}`}>
+        {showHeader && (
+          <tr className="border-y-2 border-blue-200 bg-gradient-to-r from-blue-50 via-indigo-50 to-violet-50">
+            <td colSpan={totalCols} className="py-2.5 px-3">
+              <div className="flex items-baseline gap-3 flex-wrap">
+                <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-primary/15 text-primary flex-shrink-0">
+                  <Building2 size={14} />
+                </span>
+                <span className="text-base font-extrabold text-slate-900 tracking-tight">
+                  {m.project || '— Unassigned —'}
+                </span>
+                <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide">
+                  {sectionCount} {sectionCount === 1 ? 'resource' : 'resources'}
+                  {sectionRevenue > 0 && (
+                    <>
+                      <span className="text-slate-300 mx-1">·</span>
+                      <span className="text-slate-700">${(sectionRevenue / 1000).toFixed(0)}k</span> /mo @160h
+                    </>
+                  )}
+                  {sectionAvgMargin > 0 && (
+                    <>
+                      <span className="text-slate-300 mx-1">·</span>
+                      avg margin <span className="text-slate-700">{sectionAvgMargin}%</span>
+                    </>
+                  )}
+                </span>
+              </div>
+            </td>
+          </tr>
+        )}
+        {renderMemberRow(m, handleCellSave, removeMember)}
+      </Fragment>
+    );
+  });
 }
 
 /* —— Reusable row renderer (used by both Active + Inactive tables) —— */
