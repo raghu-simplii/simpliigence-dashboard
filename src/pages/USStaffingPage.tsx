@@ -86,7 +86,7 @@ const CATEGORIES: AccountCategory[] = ['MSP', 'SI'];
 export default function USStaffingPage() {
   const { accounts, requisitions, addAccount, removeAccount, addRequisition, updateRequisition, removeRequisition } = useUSStaffingStore();
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'msp' | 'si' | 'all' | 'forecast'>('overview');
+  const [activeTab, setActiveTab] = useState<'all' | 'forecast'>('all');
   const [showAddReq, setShowAddReq] = useState(false);
   const [showAddAccount, setShowAddAccount] = useState(false);
   const [filterStage, setFilterStage] = useState<string>('All');
@@ -123,11 +123,9 @@ export default function USStaffingPage() {
 
   const filteredReqs = useMemo(() => {
     let data = reqsWithAccount;
-    if (activeTab === 'msp') data = data.filter(r => r.account_category === 'MSP');
-    if (activeTab === 'si') data = data.filter(r => r.account_category === 'SI');
     if (filterStage !== 'All') data = data.filter(r => r.stage === filterStage);
     return data;
-  }, [reqsWithAccount, activeTab, filterStage]);
+  }, [reqsWithAccount, filterStage]);
 
   // Stats
   const totalReqs = requisitions.length;
@@ -582,8 +580,8 @@ export default function USStaffingPage() {
       )}
 
       {/* Requisitions grouped by MSP / SI */}
-      {(activeTab === 'all' || activeTab === 'msp') && renderAccountGroup(mspAccounts, 'MSP Accounts')}
-      {(activeTab === 'all' || activeTab === 'si') && renderAccountGroup(siAccounts, 'SI Accounts')}
+      {renderAccountGroup(mspAccounts, 'MSP Accounts')}
+      {renderAccountGroup(siAccounts, 'SI Accounts')}
     </div>
   );
 
@@ -598,10 +596,7 @@ export default function USStaffingPage() {
       {/* Tab Navigation */}
       <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
         {[
-          { key: 'overview', label: 'Overview' },
           { key: 'all', label: 'All Requisitions' },
-          { key: 'msp', label: 'MSP' },
-          { key: 'si', label: 'SI' },
           { key: 'forecast', label: 'AI Forecast' },
         ].map(tab => (
           <button
@@ -702,7 +697,7 @@ export default function USStaffingPage() {
             </div>
           </Card>
         </>
-      ) : activeTab === 'overview' ? renderOverview() : renderRequisitions()}
+      ) : renderRequisitions()}
     </div>
   );
 }
