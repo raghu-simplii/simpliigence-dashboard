@@ -12,7 +12,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
   Users, UserCheck, Briefcase, TrendingUp, DollarSign, Plus, Search,
-  Trash2, Pencil, Filter, Download,
+  Trash2, Pencil, Filter, Download, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { useIndiaRosterStore } from '../store/useIndiaRosterStore';
 import { PageHeader } from '../components/shared/PageHeader';
@@ -93,6 +93,7 @@ export default function IndiaRosterPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [sortField, setSortField] = useState<string>('name');
   const [sortAsc, setSortAsc] = useState(true);
+  const [showInactive, setShowInactive] = useState(false);
 
   // New-member draft
   const [draft, setDraft] = useState({
@@ -131,6 +132,18 @@ export default function IndiaRosterPage() {
     });
     return data;
   }, [members, search, statusFilter, roleFilter, sortField, sortAsc]);
+
+  /* —— Active vs Inactive split ——
+   * Active  = Billable (currently earning revenue this month)
+   * Inactive = Bench / On Leave / Notice (no current allocation or leaving) */
+  const activeRows = useMemo(
+    () => filtered.filter(m => m.status === 'Billable'),
+    [filtered],
+  );
+  const inactiveRows = useMemo(
+    () => filtered.filter(m => m.status !== 'Billable'),
+    [filtered],
+  );
 
   /* —— Stats —— */
   const total = members.length;
@@ -217,6 +230,10 @@ export default function IndiaRosterPage() {
         title="India Roster"
         subtitle="Full India FTE roster — billable allocations, bench, and margin"
       />
+
+      {/* SharePoint sync banner */}
+      <SharePointSyncBanner members={members} />
+
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
@@ -347,8 +364,20 @@ export default function IndiaRosterPage() {
         </Card>
       )}
 
-      {/* Roster Table */}
-      <Card>
+      {/* —— Reusable row + table —— */}
+      {(() => null)()}
+
+      {/* Active Roster */}
+      <Card className="mb-4">
+        <div className="px-4 pt-3 pb-2 flex items-center justify-between border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            <h3 className="text-sm font-bold text-slate-700">Active Roster</h3>
+            <span className="text-[11px] text-slate-500">
+              {activeRows.length} billable {activeRows.length === 1 ? 'resource' : 'resources'} this month
+            </span>
+          </div>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
@@ -366,68 +395,13 @@ export default function IndiaRosterPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((m) => {
-                const marginPct = calcMarginPercent(m);
-                const marginAbs = calcMarginAbsolute(m);
-                const marginColor = marginPct >= 50 ? '#10b981' : marginPct >= 30 ? '#f59e0b' : marginPct > 0 ? '#ef4444' : '#94a3b8';
-                return (
-                  <tr key={m.id} className="border-t border-slate-100 hover:bg-blue-50/30">
-                    <td className="px-3 py-2 font-medium text-slate-800">
-                      <EditableCell value={m.name} onSave={(v) => handleCellSave(m.id, 'name', v)} />
-                    </td>
-                    <td className="px-3 py-2">
-                      <EditableCell value={m.role} type="select" options={[...ROSTER_ROLES]} onSave={(v) => handleCellSave(m.id, 'role', v)} />
-                    </td>
-                    <td className="px-3 py-2">
-                      <EditableCell value={m.project} onSave={(v) => handleCellSave(m.id, 'project', v)} />
-                    </td>
-                    <td className="px-3 py-2">
-                      <EditableCell value={m.status} type="select" options={INDIA_ROSTER_STATUSES}
-                        onSave={(v) => handleCellSave(m.id, 'status', v)}
-                        displayContent={
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white" style={{ background: INDIA_ROSTER_STATUS_COLORS[m.status] || '#94a3b8' }}>
-                            {m.status}
-                          </span>
-                        }
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <EditableCell value={m.cost_per_hour} type="number" onSave={(v) => handleCellSave(m.id, 'cost_per_hour', v)} prefix="$" />
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <EditableCell value={m.bill_rate} type="number" onSave={(v) => handleCellSave(m.id, 'bill_rate', v)}
-                        displayContent={<span className="font-semibold text-green-700">${m.bill_rate}/hr</span>}
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums">
-                      <span className="font-bold" style={{ color: marginColor }} title={`$${marginAbs}/hr profit`}>
-                        {m.bill_rate > 0 ? `${marginPct}%` : '—'}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2">
-                      <EditableCell value={m.start_date} type="date" onSave={(v) => handleCellSave(m.id, 'start_date', v)} />
-                    </td>
-                    <td className="px-3 py-2 max-w-[260px]">
-                      <EditableCell value={m.skills} onSave={(v) => handleCellSave(m.id, 'skills', v)} />
-                    </td>
-                    <td className="px-3 py-2 text-center">
-                      <button
-                        onClick={() => { if (confirm(`Remove ${m.name} from the roster?`)) removeMember(m.id); }}
-                        className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded"
-                        title="Remove member"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-              {filtered.length === 0 && (
+              {activeRows.map((m) => renderMemberRow(m, handleCellSave, removeMember))}
+              {activeRows.length === 0 && (
                 <tr>
                   <td colSpan={10} className="px-3 py-8 text-center text-slate-400">
                     {members.length === 0
                       ? 'No roster members yet. Click "Add Member" to start populating the India team.'
-                      : 'No matches for the current filters.'}
+                      : 'No active (billable) resources match the current filters.'}
                   </td>
                 </tr>
               )}
@@ -435,6 +409,156 @@ export default function IndiaRosterPage() {
           </table>
         </div>
       </Card>
+
+      {/* Inactive Positions — collapsed by default */}
+      <Card>
+        <button
+          type="button"
+          onClick={() => setShowInactive((v) => !v)}
+          className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 rounded-lg transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            {showInactive ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronRight size={16} className="text-slate-400" />}
+            <span className="w-2 h-2 rounded-full bg-amber-400" />
+            <h3 className="text-sm font-bold text-slate-700">Inactive Positions</h3>
+            <span className="text-[11px] text-slate-500">
+              {inactiveRows.length} on bench / leave / notice
+            </span>
+          </div>
+          <span className="text-[10px] text-slate-400 uppercase tracking-wide">
+            {showInactive ? 'Click to collapse' : 'Click to expand'}
+          </span>
+        </button>
+        {showInactive && (
+          <div className="overflow-x-auto border-t border-slate-100">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-slate-50 text-slate-500">
+                  <SortHeader field="name" label="Name" />
+                  <SortHeader field="role" label="Role" />
+                  <SortHeader field="project" label="Last Project" />
+                  <SortHeader field="status" label="Status" />
+                  <SortHeader field="cost_per_hour" label="Cost/hr" align="right" />
+                  <SortHeader field="bill_rate" label="Bill Rate" align="right" />
+                  <th className="px-3 py-2 text-right font-semibold uppercase tracking-wide text-[10px]">Margin</th>
+                  <SortHeader field="start_date" label="Start Date" />
+                  <th className="px-3 py-2 text-left font-semibold uppercase tracking-wide text-[10px]">Skills</th>
+                  <th className="px-3 py-2 text-center font-semibold uppercase tracking-wide text-[10px] w-10"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {inactiveRows.map((m) => renderMemberRow(m, handleCellSave, removeMember))}
+                {inactiveRows.length === 0 && (
+                  <tr>
+                    <td colSpan={10} className="px-3 py-8 text-center text-slate-400">
+                      No inactive positions.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
     </>
+  );
+}
+
+/* —— SharePoint sync banner ——
+ * Shows when the india_roster was last touched by the scheduled SharePoint
+ * sync (updated_by='sharepoint-sync' or 'sharepoint-sync-cron'). Surfaces the
+ * source filename so it's obvious the table is auto-populated, not manually
+ * entered.
+ */
+function SharePointSyncBanner({ members }: { members: any[] }) {
+  // Use the most recent updated_at across all rows as the sync timestamp.
+  // The scheduled sync touches every row each run.
+  const lastSync = members
+    .map(m => m.updated_at)
+    .filter(Boolean)
+    .sort()
+    .at(-1);
+
+  if (!lastSync || members.length === 0) return null;
+
+  const date = new Date(lastSync);
+  const fmt = isNaN(date.getTime())
+    ? lastSync
+    : date.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+
+  return (
+    <div className="mb-4 flex items-center gap-3 px-4 py-2.5 rounded-lg border border-blue-200 bg-blue-50/40 text-xs">
+      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-500/10 text-blue-600 font-bold text-[10px]">SP</span>
+      <div className="flex-1">
+        <div className="font-semibold text-slate-700">
+          Synced from <span className="font-mono">Staffing Report India.xlsx</span> (Rupesh's OneDrive · /Finance/KPIs and Project Reports/Staffing report/)
+        </div>
+        <div className="text-slate-500">
+          Last sync: <span className="font-medium text-slate-700">{fmt}</span> · Auto-syncs bi-weekly (1st &amp; 15th at 07:07 AM). To force a sync, open Claude → Scheduled tasks → "india-roster-sharepoint-sync" → Run now.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* —— Reusable row renderer (used by both Active + Inactive tables) —— */
+function renderMemberRow(
+  m: any,
+  handleCellSave: (id: string, field: string, val: string | number) => void,
+  removeMember: (id: string) => void,
+) {
+  const marginPct = calcMarginPercent(m);
+  const marginAbs = calcMarginAbsolute(m);
+  const marginColor = marginPct >= 50 ? '#10b981' : marginPct >= 30 ? '#f59e0b' : marginPct > 0 ? '#ef4444' : '#94a3b8';
+  return (
+    <tr key={m.id} className="border-t border-slate-100 hover:bg-blue-50/30">
+      <td className="px-3 py-2 font-medium text-slate-800">
+        <EditableCell value={m.name} onSave={(v) => handleCellSave(m.id, 'name', v)} />
+      </td>
+      <td className="px-3 py-2">
+        <EditableCell value={m.role} type="select" options={[...ROSTER_ROLES]} onSave={(v) => handleCellSave(m.id, 'role', v)} />
+      </td>
+      <td className="px-3 py-2">
+        <EditableCell value={m.project} onSave={(v) => handleCellSave(m.id, 'project', v)} />
+      </td>
+      <td className="px-3 py-2">
+        <EditableCell value={m.status} type="select" options={INDIA_ROSTER_STATUSES}
+          onSave={(v) => handleCellSave(m.id, 'status', v)}
+          displayContent={
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white" style={{ background: INDIA_ROSTER_STATUS_COLORS[m.status] || '#94a3b8' }}>
+              {m.status}
+            </span>
+          }
+        />
+      </td>
+      <td className="px-3 py-2 text-right">
+        <EditableCell value={m.cost_per_hour} type="number" onSave={(v) => handleCellSave(m.id, 'cost_per_hour', v)} prefix="$" />
+      </td>
+      <td className="px-3 py-2 text-right">
+        <EditableCell value={m.bill_rate} type="number" onSave={(v) => handleCellSave(m.id, 'bill_rate', v)}
+          displayContent={<span className="font-semibold text-green-700">${m.bill_rate}/hr</span>}
+        />
+      </td>
+      <td className="px-3 py-2 text-right tabular-nums">
+        <span className="font-bold" style={{ color: marginColor }} title={`$${marginAbs}/hr profit`}>
+          {m.bill_rate > 0 ? `${marginPct}%` : '—'}
+        </span>
+      </td>
+      <td className="px-3 py-2">
+        <EditableCell value={m.start_date} type="date" onSave={(v) => handleCellSave(m.id, 'start_date', v)} />
+      </td>
+      <td className="px-3 py-2 max-w-[260px]">
+        <EditableCell value={m.skills} onSave={(v) => handleCellSave(m.id, 'skills', v)} />
+      </td>
+      <td className="px-3 py-2 text-center">
+        <button
+          onClick={() => { if (confirm(`Remove ${m.name} from the roster?`)) removeMember(m.id); }}
+          className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded"
+          title="Remove member"
+        >
+          <Trash2 size={13} />
+        </button>
+      </td>
+    </tr>
   );
 }
