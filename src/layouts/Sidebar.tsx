@@ -5,7 +5,6 @@ import {
   Users,
   FolderKanban,
   Layers,
-  CalendarDays,
   DollarSign,
   UserPlus,
   Settings,
@@ -16,23 +15,56 @@ import {
   PanelLeftOpen,
   Globe,
   UserCheck,
+  TrendingUp,
   LogOut,
+  type LucideIcon,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { signOut } from '../lib/auth';
 
-const navItems = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/team', icon: Users, label: 'Team' },
-  { to: '/projects', icon: FolderKanban, label: 'Current Projects' },
-  { to: '/pipeline', icon: Layers, label: 'Pipeline' },
-  { to: '/forecasting', icon: CalendarDays, label: 'Forecasting' },
-  { to: '/hiring-forecast', icon: UserPlus, label: 'Hiring Forecast' },
-  { to: '/financials', icon: DollarSign, label: 'Financials' },
-  { to: '/concierge', icon: Headset, label: 'Concierge' },
-  { to: '/india-staffing', icon: ClipboardList, label: 'India Staffing' },
-  { to: '/us-staffing', icon: Globe, label: 'US Staffing' },
-  { to: '/open-bench', icon: UserCheck, label: 'Open Bench' },
+interface NavItem { to: string; icon: LucideIcon; label: string; }
+interface NavSection { label: string; items: NavItem[]; }
+
+const sections: NavSection[] = [
+  {
+    label: 'Home',
+    items: [
+      { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+    ],
+  },
+  {
+    label: 'Projects',
+    items: [
+      { to: '/team', icon: Users, label: 'Project Team' },
+      { to: '/projects', icon: FolderKanban, label: 'Current Projects' },
+      { to: '/pipeline', icon: Layers, label: 'Pipeline Projects' },
+      { to: '/forecasting', icon: TrendingUp, label: 'Utilization Forecast' },
+      { to: '/hiring-forecast', icon: UserPlus, label: 'Hiring Forecast' },
+      { to: '/financials', icon: DollarSign, label: 'Financials' },
+    ],
+  },
+  {
+    label: 'India T&M',
+    items: [
+      { to: '/india-staffing', icon: ClipboardList, label: 'India Demand' },
+      { to: '/india-roster', icon: Users, label: 'Roster' },
+      { to: '/india-hiring-forecast', icon: UserPlus, label: 'Hiring Forecast' },
+    ],
+  },
+  {
+    label: 'US T&M',
+    items: [
+      { to: '/us-staffing', icon: Globe, label: 'US Demand' },
+      { to: '/us-roster', icon: Users, label: 'US Roster' },
+      { to: '/open-bench', icon: UserCheck, label: 'Open Bench' },
+    ],
+  },
+  {
+    label: 'Other',
+    items: [
+      { to: '/concierge', icon: Headset, label: 'Concierge' },
+    ],
+  },
 ];
 
 interface SidebarProps {
@@ -70,31 +102,46 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         )}
       </div>
 
-      {/* Nav */}
-      <nav className={`flex-1 ${collapsed ? 'px-2' : 'px-3'} py-2 space-y-1 overflow-y-auto overflow-x-hidden`}>
-        {navItems.map(({ to, icon: Icon, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === '/'}
-            title={collapsed ? label : undefined}
-            className={({ isActive }) =>
-              `flex items-center ${collapsed ? 'justify-center' : ''} gap-3 ${collapsed ? 'px-2' : 'px-3'} py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive
-                  ? 'bg-sidebar-active text-white'
-                  : 'text-slate-400 hover:text-white hover:bg-sidebar-hover'
-              }`
-            }
-          >
-            <Icon size={18} className="flex-shrink-0" />
-            {!collapsed && <span className="whitespace-nowrap overflow-hidden">{label}</span>}
-          </NavLink>
+      {/* Nav — grouped by section */}
+      <nav className={`flex-1 ${collapsed ? 'px-2' : 'px-3'} pb-2 space-y-3 overflow-y-auto overflow-x-hidden`}>
+        {sections.map((section, idx) => (
+          <div key={section.label}>
+            {!collapsed && (
+              <div className="px-3 pb-1 pt-1 text-[9px] font-bold uppercase tracking-widest text-slate-500">
+                {section.label}
+              </div>
+            )}
+            {/* When collapsed, render a thin divider between groups instead of the label */}
+            {collapsed && idx > 0 && (
+              <div className="mx-2 my-2 border-t border-slate-700/40" />
+            )}
+            <div className="space-y-0.5">
+              {section.items.map(({ to, icon: Icon, label }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={to === '/'}
+                  title={collapsed ? `${section.label} — ${label}` : undefined}
+                  className={({ isActive }) =>
+                    `flex items-center ${collapsed ? 'justify-center' : ''} gap-3 ${collapsed ? 'px-2' : 'px-3'} py-2 rounded-lg text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'bg-sidebar-active text-white'
+                        : 'text-slate-400 hover:text-white hover:bg-sidebar-hover'
+                    }`
+                  }
+                >
+                  <Icon size={17} className="flex-shrink-0" />
+                  {!collapsed && <span className="whitespace-nowrap overflow-hidden">{label}</span>}
+                </NavLink>
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
 
       {/* User identity + sign-out */}
       {email && (
-        <div className={`${collapsed ? 'px-2' : 'px-3'} pt-3 mt-3 border-t border-slate-700/40`}>
+        <div className={`${collapsed ? 'px-2' : 'px-3'} pt-3 border-t border-slate-700/40`}>
           {collapsed ? (
             <button
               type="button"
@@ -127,7 +174,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       )}
 
       {/* Bottom: Settings + Toggle */}
-      <div className={`${collapsed ? 'px-2' : 'px-3'} pb-3 space-y-1`}>
+      <div className={`${collapsed ? 'px-2' : 'px-3'} pb-3 pt-2 space-y-1`}>
         <NavLink
           to="/settings"
           title={collapsed ? 'Settings' : undefined}

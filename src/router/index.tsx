@@ -12,6 +12,9 @@ import ConciergePage from '../pages/ConciergePage';
 import IndiaStaffingPage from '../pages/IndiaStaffingPage';
 import USStaffingPage from '../pages/USStaffingPage';
 import OpenBenchPage from '../pages/OpenBenchPage';
+import IndiaRosterPage from '../pages/IndiaRosterPage';
+import IndiaHiringForecastPage from '../pages/IndiaHiringForecastPage';
+import USRosterPage from '../pages/USRosterPage';
 
 export const router = createBrowserRouter(
   [
@@ -19,18 +22,30 @@ export const router = createBrowserRouter(
       path: '/',
       element: <AppLayout />,
       children: [
+        // Home
         { index: true, element: <DashboardPage /> },
-        { path: 'team', element: <TeamRosterPage /> },
-        { path: 'projects', element: <ProjectPipelinePage /> },
-        { path: 'pipeline', element: <PipelinePage /> },
-        { path: 'forecasting', element: <ForecastingPage /> },
+
+        // Projects section
+        { path: 'team', element: <TeamRosterPage /> },              // "Project Team"
+        { path: 'projects', element: <ProjectPipelinePage /> },      // Current Projects
+        { path: 'pipeline', element: <PipelinePage /> },             // Pipeline Projects
+        { path: 'forecasting', element: <ForecastingPage /> },       // "Utilization Forecast"
         { path: 'hiring-forecast', element: <HiringForecastPage /> },
         { path: 'financials', element: <FinancialsPage /> },
+
+        // India T&M section
+        { path: 'india-staffing', element: <IndiaStaffingPage /> },         // "India Demand"
+        { path: 'india-roster', element: <IndiaRosterPage /> },             // NEW
+        { path: 'india-hiring-forecast', element: <IndiaHiringForecastPage /> }, // NEW
+
+        // US T&M section
+        { path: 'us-staffing', element: <USStaffingPage /> },        // "US Demand"
+        { path: 'us-roster', element: <USRosterPage /> },            // NEW
+        { path: 'open-bench', element: <OpenBenchPage /> },
+
+        // Other
         { path: 'concierge', element: <ConciergePage /> },
         { path: 'settings', element: <SettingsPage /> },
-        { path: 'india-staffing', element: <IndiaStaffingPage /> },
-        { path: 'us-staffing', element: <USStaffingPage /> },
-        { path: 'open-bench', element: <OpenBenchPage /> },
       ],
     },
   ],
