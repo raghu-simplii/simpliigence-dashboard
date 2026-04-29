@@ -803,6 +803,165 @@ export async function runStaffingQuery(
   }
 }
 
+/* ── India Hiring Forecast — proactive-hire predictions ────────────────── */
+
+export interface IndiaHiringPrediction {
+  /** Markdown narrative — overall recommendation */
+  summary: string;
+  /** Ranked list of specific hire recommendations */
+  recommendations: Array<{
+    role: string;
+    skill: string;
+    count: number;
+    /** "Hire now" / "Hire in 30 days" / "Watchlist" */
+    urgency: 'now' | 'within_30_days' | 'within_60_days' | 'watchlist';
+    rationale: string;
+    /** Which accounts/clients this hire is meant to serve */
+    drivenBy: string[];
+  }>;
+  generatedAt: string;
+}
+
+const HIRING_FORECAST_SYSTEM = `You are a strategic recruiting analyst for an IT services firm's India delivery team. Your job is to recommend PROACTIVE hires — people the company should hire BEFORE the demand fully materializes, based on observed roster growth and demand trends.
+
+Hard rules:
+- Use only the data provided. Do not invent skills, accounts, role names, or numbers.
+- Be conservative: if the data doesn't show a clear signal, recommend "watchlist" rather than "hire now".
+- Your audience is a CEO/COO who reads this once a week — make every recommendation defensible.
+
+Inputs (as a JSON metrics object):
+- roster.monthlyGrowth: trailing 6 months of headcount + monthly joins
+- roster.netAdd90d: net new hires in last 90 days
+- roster.roleMix: current team breakdown by role bucket
+- demand.activeReqs / activePositions: open requisitions right now
+- demand.closingSoon: reqs with close_by_date within 14 days
+- demand.topSkills: skills inferred from active requisitions, ranked by total positions
+- demand.byAccount: per-client demand and recent (90-day) closure count
+- demand.closureTimeline: weekly closures + losses for last 12 weeks
+- demand.medianTimeToCloseDays: how long a typical req takes to fill
+- demand.medianFirstAdvanceDays: how long until a req moves out of Sourcing
+
+How to reason:
+- If demand.medianTimeToCloseDays > 30 AND a skill has high demand.topSkills.positions → start hiring now (we won't fill in time reactively)
+- If demand.byAccount shows a client with high recent closures + still-open reqs → that client is growing; pre-hire similar skills
+- If roster.monthlyGrowth is flat but demand is accelerating → we're behind, hire now
+- If roster.netAdd90d already covers projected demand → watchlist
+- Never recommend hiring more than 30% of current roster size in any single batch — too aggressive
+
+Output format — reply with a SINGLE JSON object, no prose outside it:
+
+{
+  "summary": "<1-2 paragraph markdown narrative covering: are we ahead/behind on hiring, where the heat is, top action.>",
+  "recommendations": [
+    {
+      "role": "<role bucket from roster.roleMix vocabulary, e.g. 'Senior Developer', 'BA'>",
+      "skill": "<one of the skills from demand.topSkills>",
+      "count": <integer, conservative>,
+      "urgency": "now" | "within_30_days" | "within_60_days" | "watchlist",
+      "rationale": "<≤30 words, cite the specific data point>",
+      "drivenBy": ["<account name>", ...]
+    }
+  ]
+}
+
+Cap recommendations at 6 entries. Order them by urgency descending. Use empty array if there's no actionable signal — that's a valid outcome.`;
+
+const HIRING_FORECAST_CACHE_KEY = 'simpliigence-india-hiring-forecast-v1';
+
+function readCachedHiringForecast(): IndiaHiringPrediction | null {
+  try {
+    const raw = localStorage.getItem(HIRING_FORECAST_CACHE_KEY);
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as IndiaHiringPrediction;
+    const today = new Date().toISOString().slice(0, 10);
+    if ((cached.generatedAt || '').slice(0, 10) === today) return cached;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedHiringForecast(p: IndiaHiringPrediction): void {
+  try { localStorage.setItem(HIRING_FORECAST_CACHE_KEY, JSON.stringify(p)); } catch { /* ignore */ }
+}
+
+/** Run the AI prediction. Pass in pre-computed metrics from
+ *  `lib/indiaHiringMetrics.computeIndiaHiringMetrics()`. */
+export async function runIndiaHiringForecast(
+  metrics: unknown,
+  opts: { forceRefresh?: boolean } = {},
+): Promise<IndiaHiringPrediction> {
+  if (!opts.forceRefresh) {
+    const cached = readCachedHiringForecast();
+    if (cached) return cached;
+  }
+
+  const client = getClient();
+  if (!client) {
+    return {
+      summary: '_Add your Anthropic API key in Settings to get AI-driven hiring forecasts._',
+      recommendations: [],
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  try {
+    const response = await client.messages.create({
+      model: MODEL,
+      max_tokens: 2048,
+      thinking: { type: 'adaptive' },
+      system: [
+        { type: 'text', text: HIRING_FORECAST_SYSTEM },
+        {
+          type: 'text',
+          text: `METRICS (JSON):\n${JSON.stringify(metrics)}`,
+          cache_control: { type: 'ephemeral' },
+        },
+      ],
+      messages: [{ role: 'user', content: 'Give me this week\'s proactive-hiring forecast per the format above.' }],
+    });
+
+    const textBlock = response.content.find((b): b is Anthropic.TextBlock => b.type === 'text');
+    const raw = textBlock?.text ?? '';
+    const match = raw.match(/\{[\s\S]*\}/);
+    let parsed: { summary?: string; recommendations?: unknown[] } | null = null;
+    if (match) {
+      try { parsed = JSON.parse(match[0]); } catch { /* ignore */ }
+    }
+
+    const result: IndiaHiringPrediction = {
+      summary: parsed?.summary ? String(parsed.summary) : raw || 'Claude returned an empty response.',
+      recommendations: Array.isArray(parsed?.recommendations)
+        ? (parsed.recommendations as unknown[])
+          .filter((r): r is { role: string; skill: string; count: number; urgency: string; rationale: string; drivenBy?: string[] } =>
+            !!r && typeof r === 'object' && 'role' in r && 'count' in r,
+          )
+          .map((r: { role: string; skill: string; count: number; urgency: string; rationale: string; drivenBy?: string[] }) => ({
+            role: String(r.role),
+            skill: String(r.skill || ''),
+            count: Math.max(0, Math.min(50, Number(r.count) || 0)),
+            urgency: (['now', 'within_30_days', 'within_60_days', 'watchlist'] as const).includes(r.urgency as 'now' | 'within_30_days' | 'within_60_days' | 'watchlist')
+              ? (r.urgency as 'now' | 'within_30_days' | 'within_60_days' | 'watchlist')
+              : 'watchlist' as const,
+            rationale: String(r.rationale || '').slice(0, 400),
+            drivenBy: Array.isArray(r.drivenBy) ? r.drivenBy.map(String).slice(0, 6) : [],
+          }))
+          .slice(0, 6)
+        : [],
+      generatedAt: new Date().toISOString(),
+    };
+    writeCachedHiringForecast(result);
+    return result;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      summary: `_AI forecast unavailable: ${msg.slice(0, 200)}_`,
+      recommendations: [],
+      generatedAt: new Date().toISOString(),
+    };
+  }
+}
+
 /** Suggested starter questions for the India Staffing Smart Query. */
 export const STAFFING_SUGGESTED_QUERIES = [
   'Which reqs are at risk of missing their close date?',
