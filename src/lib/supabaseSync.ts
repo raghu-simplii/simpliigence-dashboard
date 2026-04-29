@@ -16,6 +16,7 @@ import { emptyMonthRecord } from '../types/forecast';
 import type { StaffingAccount as IndiaAccount, StaffingRequisition as IndiaRequisition, DailyStatus, StaffingHistoryEntry, StaffingCandidate } from '../types/staffing';
 import type { USStaffingAccount, USStaffingRequisition, AccountCategory } from '../types/usStaffing';
 import type { BenchResource, BenchUpdate, VisaCategory, JobPriority, BenchUpdateType } from '../types/openBench';
+import type { IndiaRosterMember, IndiaRosterStatus } from '../types/indiaRoster';
 
 // ─── Conversion helpers ────────────────────────────────────────────
 
@@ -429,6 +430,45 @@ function rowToBenchUpdate(row: any): BenchUpdate {
   };
 }
 
+// ─── India Roster converters ──────────────────────────────────────
+
+function indiaRosterToRow(m: IndiaRosterMember) {
+  return {
+    id: m.id,
+    name: m.name,
+    role: m.role,
+    project: m.project,
+    status: m.status,
+    cost_per_hour: m.cost_per_hour,
+    bill_rate: m.bill_rate,
+    start_date: m.start_date,
+    skills: m.skills,
+    email: m.email,
+    notes: m.notes,
+    created_at: m.created_at,
+    updated_at: m.updated_at,
+    updated_by: CLIENT_ID,
+  };
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToIndiaRoster(row: any): IndiaRosterMember {
+  return {
+    id: row.id,
+    name: row.name ?? '',
+    role: row.role ?? '',
+    project: row.project ?? '',
+    status: (row.status ?? 'Bench') as IndiaRosterStatus,
+    cost_per_hour: row.cost_per_hour ?? 0,
+    bill_rate: row.bill_rate ?? 0,
+    start_date: row.start_date ?? '',
+    skills: row.skills ?? '',
+    email: row.email ?? '',
+    notes: row.notes ?? '',
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
 // ─── US Staffing fetchers ─────────────────────────────────────────
 
 export async function fetchUSStaffing(): Promise<{ accounts: USStaffingAccount[]; requisitions: USStaffingRequisition[] } | null> {
@@ -444,6 +484,17 @@ export async function fetchUSStaffing(): Promise<{ accounts: USStaffingAccount[]
     accounts: (acctRes.data || []).map(rowToUSAccount),
     requisitions: (reqRes.data || []).map(rowToUSReq),
   };
+}
+
+// ─── India Roster fetcher ─────────────────────────────────────────
+
+export async function fetchIndiaRoster(): Promise<IndiaRosterMember[] | null> {
+  const { data, error } = await supabase.from('india_roster').select('*');
+  if (error) {
+    console.warn('[supabase] fetch india_roster failed (table may be missing):', error.message);
+    return null;
+  }
+  return (data || []).map(rowToIndiaRoster);
 }
 
 // ─── Open Bench fetcher ──────────────────────────────────────────
@@ -727,6 +778,20 @@ export const db = {
     if (updates.length) await supabase.from('open_bench_updates').insert(updates.map(benchUpdateToRow));
   },
 
+  // --- India Roster ---
+  async upsertIndiaRosterMember(m: IndiaRosterMember) {
+    const { error } = await supabase.from('india_roster').upsert(indiaRosterToRow(m), { onConflict: 'id' });
+    if (error) console.warn('[supabase] upsert india_roster failed:', error);
+  },
+  async deleteIndiaRosterMember(id: string) {
+    const { error } = await supabase.from('india_roster').delete().eq('id', id);
+    if (error) console.warn('[supabase] delete india_roster failed:', error);
+  },
+  async replaceAllIndiaRoster(members: IndiaRosterMember[]) {
+    await supabase.from('india_roster').delete().neq('id', '');
+    if (members.length) await supabase.from('india_roster').insert(members.map(indiaRosterToRow));
+  },
+
   /** Clear all tables (for Settings → Clear All Data). */
   async clearAll() {
     await Promise.all([
@@ -755,6 +820,7 @@ export const db = {
       supabase.from('us_staffing_accounts').delete().neq('id', ''),
       supabase.from('open_bench_updates').delete().neq('id', ''),
       supabase.from('open_bench_resources').delete().neq('id', ''),
+      supabase.from('india_roster').delete().neq('id', ''),
     ]);
   },
 };
@@ -770,6 +836,7 @@ type StoreSetters = {
   setIndiaStaffing: (accounts: IndiaAccount[], requisitions: IndiaRequisition[], statuses: DailyStatus[], history?: StaffingHistoryEntry[], candidates?: StaffingCandidate[]) => void;
   setUSStaffing: (accounts: USStaffingAccount[], requisitions: USStaffingRequisition[]) => void;
   setOpenBench: (resources: BenchResource[], updates: BenchUpdate[]) => void;
+  setIndiaRoster: (members: IndiaRosterMember[]) => void;
   getForecastAssignments: () => ForecastAssignment[];
   getStaffingRequests: () => StaffingRequest[];
   getPipelineProjects: () => ZohoPipelineProject[];
@@ -965,6 +1032,20 @@ export function setupRealtimeSubscriptions(setters: StoreSetters) {
       },
     );
   }
+
+  // --- India Roster ---
+  channel.on(
+    'postgres_changes',
+    { event: '*', schema: 'public', table: 'india_roster' },
+    (payload) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const row = (payload.new || payload.old) as any;
+      if (row?.updated_by === CLIENT_ID) return;
+      fetchIndiaRoster().then((members) => {
+        if (members) setters.setIndiaRoster(members);
+      });
+    },
+  );
 
   channel.subscribe();
   return () => { supabase.removeChannel(channel); };

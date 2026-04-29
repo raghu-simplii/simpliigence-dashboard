@@ -6,6 +6,7 @@ import { AuthGate } from './components/AuthGate';
 import { buildSeedAssignments } from './data/employeeSeed';
 import { useForecastStore, useFinancialStore, useSyncStore, useHiringForecastStore, usePipelineStore, useStaffingStore, useUSStaffingStore } from './store';
 import { useOpenBenchStore } from './store/useOpenBenchStore';
+import { useIndiaRosterStore } from './store/useIndiaRosterStore';
 import { ZOHO_SEED_PROJECTS } from './data/zohoSeed';
 import {
   fetchAssignments,
@@ -17,6 +18,7 @@ import {
   fetchIndiaStaffing,
   fetchUSStaffing,
   fetchOpenBench,
+  fetchIndiaRoster,
   setupRealtimeSubscriptions,
   db,
 } from './lib/supabaseSync';
@@ -59,6 +61,7 @@ function useSupabaseInit() {
           indiaStaffingRes,
           usStaffingRes,
           openBenchRes,
+          indiaRosterRes,
         ] = await Promise.all([
           withTimeout(fetchAssignments()),
           withTimeout(fetchFinancialSettings()),
@@ -69,6 +72,7 @@ function useSupabaseInit() {
           withTimeout(fetchIndiaStaffing()),
           withTimeout(fetchUSStaffing()),
           withTimeout(fetchOpenBench()),
+          withTimeout(fetchIndiaRoster()),
         ]);
 
         // --- Forecast assignments ---
@@ -221,6 +225,23 @@ function useSupabaseInit() {
           console.warn('[supabase] Open bench fetch timed out — using localStorage');
         }
 
+        // --- India Roster ---
+        if (!indiaRosterRes.timedOut) {
+          const rd = indiaRosterRes.value;
+          if (rd && rd.length > 0) {
+            useIndiaRosterStore.setState({ members: rd });
+            console.log('[supabase] Loaded india roster:', rd.length, 'members');
+          } else {
+            const local = useIndiaRosterStore.getState();
+            if (local.members.length > 0) {
+              await db.replaceAllIndiaRoster(local.members);
+              console.log('[supabase] Seeded india roster to Supabase');
+            }
+          }
+        } else {
+          console.warn('[supabase] India roster fetch timed out — using localStorage');
+        }
+
         // Set up realtime subscriptions
         cleanup = setupRealtimeSubscriptions({
           setForecastState: (assignments, weekDates) => {
@@ -258,6 +279,9 @@ function useSupabaseInit() {
           },
           setOpenBench: (resources, updates) => {
             useOpenBenchStore.setState({ resources, updates });
+          },
+          setIndiaRoster: (members) => {
+            useIndiaRosterStore.setState({ members });
           },
           getForecastAssignments: () => useForecastStore.getState().assignments,
           getStaffingRequests: () => useHiringForecastStore.getState().staffingRequests,
