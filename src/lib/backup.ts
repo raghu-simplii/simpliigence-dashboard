@@ -21,8 +21,18 @@ const TABLES = [
   'india_staffing_accounts',
   'india_staffing_requisitions',
   'india_staffing_statuses',
+  'india_staffing_candidates',
+  'india_staffing_history',
   'us_staffing_accounts',
   'us_staffing_requisitions',
+  // Added 2026-04-29 after Open Bench data loss incident — these tables
+  // MUST be backed up so a localStorage clear can never silently lose
+  // real roster data again.
+  'open_bench_resources',
+  'open_bench_updates',
+  'india_roster',
+  'us_roster',
+  'authorized_users',
 ] as const;
 
 export interface BackupPayload {

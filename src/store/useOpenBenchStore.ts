@@ -4,15 +4,15 @@ import { nanoid } from 'nanoid';
 import type { BenchResource, BenchUpdate } from '../types/openBench';
 import { db } from '../lib/supabaseSync';
 
-/* —— Seed data —— */
-const SEED_RESOURCES: BenchResource[] = [
-  { id: 'br-1', resource_name: 'Arun Kumar', years_of_experience: 8, visa_category: 'H1B', primary_skill: 'Salesforce', roles: 'SF Developer / SF Architect', job_priority: 'Primary', target_rate: 75, location: 'Dallas, TX', key_opportunities: '', notes: 'Available immediately', available: true, created_at: '2025-04-01', updated_at: '2025-04-01' },
-  { id: 'br-2', resource_name: 'Priya Sharma', years_of_experience: 5, visa_category: 'L1', primary_skill: 'Java Full Stack', roles: 'Java Developer', job_priority: 'Primary', target_rate: 65, location: 'Chicago, IL', key_opportunities: '', notes: 'Available from April 15', available: true, created_at: '2025-04-01', updated_at: '2025-04-01' },
-  { id: 'br-3', resource_name: 'Ravi Patel', years_of_experience: 10, visa_category: 'GC', primary_skill: 'Python AI/ML', roles: 'ML Engineer / Data Scientist', job_priority: 'Primary', target_rate: 90, location: 'San Francisco, CA', key_opportunities: '', notes: 'On bench since March 20', available: true, created_at: '2025-03-20', updated_at: '2025-04-01' },
-  { id: 'br-4', resource_name: 'Sneha Reddy', years_of_experience: 3, visa_category: 'OPT', primary_skill: '.NET', roles: '.NET Developer', job_priority: 'Secondary', target_rate: 50, location: 'Atlanta, GA', key_opportunities: '', notes: 'OPT expires Aug 2025', available: true, created_at: '2025-04-01', updated_at: '2025-04-01' },
-  { id: 'br-5', resource_name: 'Vikram Singh', years_of_experience: 12, visa_category: 'US Citizen', primary_skill: 'DevOps', roles: 'DevOps Lead / SRE', job_priority: 'Primary', target_rate: 95, location: 'New York, NY', key_opportunities: '', notes: 'Available immediately', available: true, created_at: '2025-03-25', updated_at: '2025-04-01' },
-  { id: 'br-6', resource_name: 'Meena Iyer', years_of_experience: 6, visa_category: 'H4 EAD', primary_skill: 'QA Automation', roles: 'QA Lead / SDET', job_priority: 'Secondary', target_rate: 60, location: 'Seattle, WA', key_opportunities: '', notes: 'Selenium, Cypress expert', available: true, created_at: '2025-04-01', updated_at: '2025-04-01' },
-];
+/* —— No demo seed ——
+ * IMPORTANT: This array MUST stay empty.
+ * Background: previously this seeded six demo rows (Arun Kumar, Priya
+ * Sharma, Ravi Patel, etc.). When a user's localStorage was empty AND
+ * Supabase was empty (e.g. after a forced clear), Zustand fell back to
+ * this seed and the auto-sync pushed it up to Supabase, clobbering real
+ * data. Never restore demo seeds here — Supabase is the source of truth,
+ * populated via the dashboard UI or scheduled syncs. */
+const SEED_RESOURCES: BenchResource[] = [];
 
 /* —— Store —— */
 interface OpenBenchState {
